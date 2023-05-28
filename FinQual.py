@@ -80,6 +80,8 @@ class Ticker():
         self.ticker = ticker
         self.data = self.SEC()
 
+    @ratelimit.sleep_and_retry
+    @ratelimit.limits(calls = 9, period = 1)
     def SEC(self):
         """
         Function to get a Pandas dataframe from the SEC API of a chosen ticker
@@ -114,8 +116,6 @@ class Ticker():
 
         return data
 
-    @ratelimit.sleep_and_retry
-    @ratelimit.limits(calls = 10, period = 1)
     def lookup(self, node, year, category, quarter=None):
         """
         Looks up items that are under the "us-gaap" taxonomy and are in USD units, this has to be done year by year or quarter
