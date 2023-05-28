@@ -862,7 +862,8 @@ opex3_30 = Node("OtherSellingAndMarketingExpense", attribute="debit", parent=ope
 
 opex3_31 = Node("AllocatedShareBasedCompensationExpense", attribute="debit", parent=opex2_22)
 opex3_32 = Node("SalariesWagesAndOfficersCompensation", attribute="debit", parent=opex2_22)
-opex3_33 = Node("OtherLaborRelatedExpenses", attribute="debit", parent=opex2_22)
+opex3_33_1 = Node("LaborAndRelatedExpense", attribute="debit", parent=opex2_22)
+opex3_33 = Node("OtherLaborRelatedExpenses", attribute="debit", parent=opex3_33_1)
 opex3_34 = Node("ProfessionalFees", attribute="debit", parent=opex2_22)
 opex3_35 = Node("BusinessDevelopment", attribute="debit", parent=opex2_22)
 opex3_36 = Node("GeneralInsuranceExpense", attribute="debit", parent=opex2_22)
