@@ -4,8 +4,9 @@ import numpy as np
 import requests
 import json
 import datetime as dt
+import ratelimit
+from ratelimit import sleep_and_retry
 
-# hi
 # Node class and respective functions
 """
 Tree class
@@ -113,6 +114,8 @@ class Ticker():
 
         return data
 
+    @ratelimit.sleep_and_retry
+    @ratelimit.limits(calls = 10, period = 1)
     def lookup(self, node, year, category, quarter=None):
         """
         Looks up items that are under the "us-gaap" taxonomy and are in USD units, this has to be done year by year or quarter
