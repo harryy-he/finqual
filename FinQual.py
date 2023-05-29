@@ -6,13 +6,11 @@ import json
 import datetime as dt
 import ratelimit
 from ratelimit import sleep_and_retry
-import mappings.py import *
 
 # Node class and respective functions
 """
 Tree class
 """
-
 
 class Node():
     def __init__(self, name, children=None, parent=None, attribute=None):
@@ -765,7 +763,8 @@ cor5_3 = Node("LandingFeesAndOtherRentals", attribute="debit", parent=cor4_11)
 """
 Operating Expenses
 """
-opex = Node("OperatingExpenses", attribute="debit", parent=oi)
+opex1 = Node("NoninterestExpense", attribute = "debit", parent = oi)
+opex = Node("OperatingExpenses", attribute="debit", parent=opex1)
 
 # Level 1
 opex1_1 = Node("OperatingCostsAndExpenses", attribute="debit", parent=opex)
@@ -2112,8 +2111,3 @@ cce9_8 = Node("PaymentsToAcquireHeldForSaleRealEstate", attribute="credit", pare
 cce9_9 = Node("PaymentsToAcquireOtherRealEstate", attribute="credit", parent=cce8_1)
 
 cce9_10 = Node("", attribute="credit", parent=cce8_1)
-
-
-
-
-
