@@ -1,4 +1,4 @@
-# FinQual Package
+# finqual
 
 This is a work in progress package that enables users to programmatically access the SEC EDGAR API database to retrieve financial information such as income statement, balance sheet or cash flow statement.
 
@@ -12,7 +12,7 @@ This has two key features that enable better programmatic access compared to oth
 ## Functions
 First, import the package using:
 ```
-from FinQual import FinQual as fq
+import finqual as fq
 ```
 From there, use a "Ticker" class to call the desired stock and the desired financial statement. For example:
 ```
