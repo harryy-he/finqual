@@ -12,7 +12,7 @@ This has two key features that enable better programmatic access compared to oth
 ## Functions
 First, import the package using:
 ```
-from import finqual as fq
+from finqual import finqual as fq
 ```
 From there, use a "Ticker" class to call the desired stock and the desired financial statement. For example:
 ```
