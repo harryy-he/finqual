@@ -620,6 +620,15 @@ class Ticker():
             df = df.loc[:, (df != 0).any(axis=0)]
             return df
 
+    def comparables(self):
+        sic = pd.read_csv('sec_sic.csv', index_col = 0)
+        sic = sic.dropna()
+        sic["SIC"] = sic["SIC"].astype(int)
+
+        sic_code = sic[sic["ticker"] == self.ticker]["SIC"].values[0]
+        company_list = sic[sic["SIC"] == sic_code]
+
+        return company_list
 
 """
 Net Income
