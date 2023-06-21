@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import requests
 import ratelimit
+import datetime
 
 # Node class and respective functions
 """
@@ -133,7 +134,7 @@ class Ticker():
             try:
 
                 df = pd.DataFrame(data["facts"]["us-gaap"][item]["units"]["USD"])
-                df = df.dropna()
+                df.dropna(inplace = True)
                 return df[df["frame"] == search]["val"].iloc[0]
 
             except:
@@ -148,7 +149,7 @@ class Ticker():
             try:
 
                 df = pd.DataFrame(data["facts"]["us-gaap"][item]["units"]["USD"])
-                df = df.dropna()
+                df.dropna(inplace = True)
                 df["frame"] = df["frame"].str.replace('I', '')
                 fy = df[df["fp"] == "FY"].iloc[-1][7][-2:]
 
@@ -167,7 +168,7 @@ class Ticker():
 
             try:
                 df = pd.DataFrame(data["facts"]["us-gaap"][item]["units"]["USD"])
-                df = df.dropna()
+                df.dropna(inplace = True)
                 df["frame"] = df["frame"].str.replace('I', '')
 
                 try:
@@ -202,7 +203,6 @@ class Ticker():
         Returns the value of a chosen node at a certain point in time, using a tree-based node system and summing where needed
         """
         check = self.lookup(node, year, category, quarter)
-        # print(node.name + str(check))
 
         if (check != False):
             values.append(check)
@@ -277,8 +277,8 @@ class Ticker():
 
         node_names = ["Revenues", "Cost of Revenue", "Gross Profit", "Operating Expenses", "Cost and Expenses",
                       "Operating Profit"
-            , "Non-Operating Income/Expense", "Pretax Profit", "Tax", "Net Profit", "Depreciation and Amortization"
-            , "Interest Expense"]
+                     ,"Non-Operating Income/Expense", "Pretax Profit", "Tax", "Net Profit", "Depreciation and Amortization"
+                     ,"Interest Expense"]
 
         """
         Appending each node values for each year to a data
@@ -313,8 +313,7 @@ class Ticker():
                     Getting the annual figures for comparison into an "actual" list
                     """
                     if readable == True:
-                        annual = [int(x.replace(',', '')) for x in
-                                  self.income1(i, i, quarter=False, readable=True, category="cashflow")[i]]
+                        annual = [int(x.replace(',', '')) for x in self.income1(i, i, quarter=False, readable=True, category="cashflow")[i]]
                     else:
                         annual = list(self.income1(i, i, quarter=False, readable=False, category="cashflow")[i])
 
@@ -334,25 +333,15 @@ class Ticker():
             Sense-checking
             """
 
-            df.loc["Cost of Revenue"] = [
-                df.loc["Revenues"][str(i) + "Q" + str(j)] - df.loc["Gross Profit"][str(i) + "Q" + str(j)] for i in
-                np.arange(end, start - 2, -1) for j in np.arange(4, 0, -1)]
+            df.loc["Cost of Revenue"] = df.loc["Revenues"] - df.loc["Gross Profit"]
 
-            df.loc["Operating Expenses"] = [
-                df.loc["Gross Profit"][str(i) + "Q" + str(j)] - df.loc["Operating Profit"][str(i) + "Q" + str(j)] for i
-                in np.arange(end, start - 2, -1) for j in np.arange(4, 0, -1)]
+            df.loc["Operating Expenses"] = df.loc["Gross Profit"] - df.loc["Operating Profit"]
 
-            df.loc["Non-Operating Income/Expense"] = [
-                df.loc["Pretax Profit"][str(i) + "Q" + str(j)] - df.loc["Operating Profit"][str(i) + "Q" + str(j)] for i
-                in np.arange(end, start - 2, -1) for j in np.arange(4, 0, -1)]
+            df.loc["Non-Operating Income/Expense"] = df.loc["Pretax Profit"] - df.loc["Operating Profit"]
 
-            df.loc["EBIT"] = [df.loc["Net Profit"][str(i) + "Q" + str(j)] + df.loc["Tax"][str(i) + "Q" + str(j)] +
-                              df.loc["Interest Expense"][str(i) + "Q" + str(j)] for i in np.arange(end, start - 2, -1)
-                              for j in np.arange(4, 0, -1)]
+            df.loc["EBIT"] = df.loc["Net Profit"] + df.loc["Tax"] + df.loc["Interest Expense"]
 
-            df.loc["EBITDA"] = [
-                df.loc["EBIT"][str(i) + "Q" + str(j)] + df.loc["Depreciation and Amortization"][str(i) + "Q" + str(j)]
-                for i in np.arange(end, start - 2, -1) for j in np.arange(4, 0, -1)]
+            df.loc["EBITDA"] = df.loc["EBIT"] + df.loc["Depreciation and Amortization"]
 
         else:
 
@@ -366,33 +355,27 @@ class Ticker():
             Sense-checking
             """
 
-            df.loc["Cost of Revenue"] = [df.loc["Revenues"][i] - df.loc["Gross Profit"][i] for i in
-                                         np.arange(end, start - 2, -1)]
+            df.loc["Cost of Revenue"] = df.loc["Revenues"] - df.loc["Gross Profit"]
 
             for i in df.columns:
                 if (df.loc["Cost of Revenue", i] == 0 and df.loc["Cost and Expenses", i] != 0 and df.loc[
                     "Operating Expenses", i] != 0):
                     df.loc["Cost of Revenue", i] = df.loc["Cost and Expenses", i] - df.loc["Operating Expenses", i]
 
-            df.loc["Gross Profit"] = [df.loc["Revenues"][i] - df.loc["Cost of Revenue"][i] for i in
-                                      np.arange(end, start - 2, -1)]
+            df.loc["Gross Profit"] = df.loc["Revenues"] - df.loc["Cost of Revenue"]
 
             for i in df.columns:
                 if (df.loc["Operating Profit", i] == 0 and df.loc["Operating Expenses", i] != 0 and df.loc[
                     "Gross Profit", i] != 0):
                     df.loc["Operating Profit", i] = df.loc["Gross Profit", i] - df.loc["Operating Expenses", i]
 
-            df.loc["Operating Expenses"] = [df.loc["Gross Profit"][i] - df.loc["Operating Profit"][i] for i in
-                                            np.arange(end, start - 2, -1)]
+            df.loc["Operating Expenses"] = df.loc["Gross Profit"] - df.loc["Operating Profit"]
 
-            df.loc["Non-Operating Income/Expense"] = [df.loc["Pretax Profit"][i] - df.loc["Operating Profit"][i] for i
-                                                      in np.arange(end, start - 2, -1)]
+            df.loc["Non-Operating Income/Expense"] = df.loc["Pretax Profit"] - df.loc["Operating Profit"]
 
-            df.loc["EBIT"] = [df.loc["Net Profit"][i] + df.loc["Tax"][i] + df.loc["Interest Expense"][i] for i in
-                              np.arange(end, start - 2, -1)]
+            df.loc["EBIT"] = df.loc["Net Profit"] + df.loc["Tax"] + df.loc["Interest Expense"]
 
-            df.loc["EBITDA"] = [df.loc["EBIT"][i] + df.loc["Depreciation and Amortization"][i] for i in
-                                np.arange(end, start - 2, -1)]
+            df.loc["EBITDA"] = df.loc["EBIT"] + df.loc["Depreciation and Amortization"]
 
         if readable == True:
 
@@ -621,12 +604,62 @@ class Ticker():
             return df
 
     def comparables(self):
-        sic = pd.read_csv('sec_sic.csv', index_col = 0)
+        sic = pd.read_csv('sec_sic.csv', index_col=0)
         sic = sic.dropna()
         sic["SIC"] = sic["SIC"].astype(int)
 
         sic_code = sic[sic["ticker"] == self.ticker]["SIC"].values[0]
         company_list = sic[sic["SIC"] == sic_code]
+
+        market_cap = []
+        for i in company_list["ticker"]:
+            try:
+                market_cap.append(Ticker(i).SEC1()["facts"]["dei"]["EntityPublicFloat"]["units"]["USD"][-1]["val"])
+            except:
+                market_cap.append(0)
+
+        company_list["market cap"] = market_cap
+
+        company_list = company_list.sort_values(by='market cap', ascending=False)
+        company_list = company_list.head()
+
+        current_year = datetime.datetime.now().year
+        previous_year = datetime.datetime.now().year - 2
+
+        enterprise_value = []
+        ebitda_list = []
+
+        for i in company_list["ticker"]:
+            short_debt = Ticker(i).year_tree_item(cl, previous_year, current_year, category="balance", quarter=True)
+            short_debt = [i for i in short_debt if i != 0][0]
+
+            if short_debt == []:
+                short_debt = 0
+
+            long_debt = Ticker(i).year_tree_item(ncl1_1, previous_year, current_year, category="balance", quarter=True)
+            long_debt = [i for i in long_debt if i != 0][0]
+
+            if long_debt == []:
+                long_debt = 0
+
+            cash = Ticker(i).year_tree_item(ca2_1, previous_year, current_year, category="balance", quarter=True)
+            cash = [i for i in cash if i != 0][0]
+
+            if cash == []:
+                cash = 0
+
+            enterprise = short_debt + long_debt - cash
+            enterprise_value.append(enterprise)
+
+            ebitda = Ticker(i).income(previous_year, current_year, quarter=True).loc["EBITDA"].tolist()
+            ebitda = [i for i in ebitda if i != 0][0]
+            ebitda_list.append(ebitda)
+
+        company_list["enterprise value"] = enterprise_value
+        company_list["enterprise value"] = company_list["enterprise value"] + company_list["market cap"]
+        company_list["ebitda"] = ebitda_list
+
+        company_list["ev/ebitda"] = company_list["enterprise value"] / company_list["ebitda"]
 
         return company_list
 
