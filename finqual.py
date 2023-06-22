@@ -552,7 +552,6 @@ class Ticker():
             Sense-checking
             """
             df.loc["Total Non-Current Assets"] = df.loc["Total Assets"] - df.loc["Total Current Assets"]
-            print(df.iloc[0:4].sum())
             df.loc["Other Current Assets"] = df.loc["Total Current Assets"] - df.iloc[0:4].sum()
             df.loc["Other Non-Current Assets"] = df.loc["Total Non-Current Assets"] - df.iloc[6:7].sum()
 
