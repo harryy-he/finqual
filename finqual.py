@@ -134,7 +134,7 @@ class Ticker():
             try:
 
                 df = pd.DataFrame(data["facts"]["us-gaap"][item]["units"]["USD"])
-                df.dropna(inplace = True)
+                df = df.dropna()
                 return df[df["frame"] == search]["val"].iloc[0]
 
             except:
@@ -149,7 +149,7 @@ class Ticker():
             try:
 
                 df = pd.DataFrame(data["facts"]["us-gaap"][item]["units"]["USD"])
-                df.dropna(inplace = True)
+                df = df.dropna()
                 df["frame"] = df["frame"].str.replace('I', '')
                 fy = df[df["fp"] == "FY"].iloc[-1][7][-2:]
 
@@ -168,7 +168,7 @@ class Ticker():
 
             try:
                 df = pd.DataFrame(data["facts"]["us-gaap"][item]["units"]["USD"])
-                df.dropna(inplace = True)
+                df = df.dropna()
                 df["frame"] = df["frame"].str.replace('I', '')
 
                 try:
@@ -203,6 +203,7 @@ class Ticker():
         Returns the value of a chosen node at a certain point in time, using a tree-based node system and summing where needed
         """
         check = self.lookup(node, year, category, quarter)
+        # print(node.name + str(check))
 
         if (check != False):
             values.append(check)
@@ -517,10 +518,8 @@ class Ticker():
         Appending each node values for each year to a data
         """
         if quarter == True:
-            data = [self.year_tree_item(i, start, end, category="balance", quarter=True) for i in
-                    nodes]  # Fetching the data
-            df = pd.DataFrame(data, index=[node_names], columns=[
-                quarter_list])  # Creating the dataframe with columns and index according to the list
+            data = [self.year_tree_item(i, start, end, category = "balance", quarter=True) for i in nodes]  # Fetching the data
+            df = pd.DataFrame(data, index=[node_names], columns=[quarter_list])  # Creating the dataframe with columns and index according to the list
 
             df.columns = df.columns.get_level_values(0)  # Resetting to flat index
             df.index = df.index.get_level_values(0)  # Resetting to flat index
@@ -528,11 +527,9 @@ class Ticker():
             """
             Sense-checking
             """
-            df.loc["Total Non-Current Assets"] = [
-                df.loc["Total Assets"][str(i) + "Q" + str(j)] - df.loc["Total Current Assets"][str(i) + "Q" + str(j)]
-                for i in np.arange(end, start - 1, -1) for j in np.arange(4, 0, -1)]
+            df.loc["Total Non-Current Assets"] = df.loc["Total Assets"] - df.loc["Total Current Assets"]
             df.loc["Other Current Assets"] = [
-                df.loc["Total Current Assets"][str(i) + "Q" + str(j)] - df.iloc[0:4][str(i) + "Q" + str(j)].sum() for i
+                df.loc["Total Current Assets"][str(i) + "Q" + str(j)] - df.iloc[0:4][str(i) + "Q" + str(j)].sum(axis = 1) for i
                 in np.arange(end, start - 1, -1) for j in np.arange(4, 0, -1)]
             df.loc["Other Non-Current Assets"] = [
                 df.loc["Total Non-Current Assets"][str(i) + "Q" + str(j)] - df.iloc[6:7][str(i) + "Q" + str(j)].sum()
@@ -557,7 +554,7 @@ class Ticker():
 
         else:
 
-            data = [self.year_tree_item(i, start, end, category="balance") for i in nodes]
+            data = [self.year_tree_item(i, start, end, category = "balance") for i in nodes]
 
             df = pd.DataFrame(data, index=[node_names], columns=[year_list])
 
@@ -567,8 +564,8 @@ class Ticker():
             """
             Sense-checking
             """
-            df.loc["Total Non-Current Assets"] = [df.loc["Total Assets"][i] - df.loc["Total Current Assets"][i] for i in
-                                                  np.arange(end, start - 1, -1)]
+            df.loc["Total Non-Current Assets"] = df.loc["Total Assets"] - df.loc["Total Current Assets"]
+            print(df.iloc[0:4])
             df.loc["Other Current Assets"] = [df.loc["Total Current Assets"][i] - df.iloc[0:4][i].sum() for i in
                                               np.arange(end, start - 1, -1)]
             df.loc["Other Non-Current Assets"] = [df.loc["Total Non-Current Assets"][i] - df.iloc[6:7][i].sum() for i in
