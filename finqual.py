@@ -528,29 +528,16 @@ class Ticker():
             Sense-checking
             """
             df.loc["Total Non-Current Assets"] = df.loc["Total Assets"] - df.loc["Total Current Assets"]
-            df.loc["Other Current Assets"] = [
-                df.loc["Total Current Assets"][str(i) + "Q" + str(j)] - df.iloc[0:4][str(i) + "Q" + str(j)].sum(axis = 1) for i
-                in np.arange(end, start - 1, -1) for j in np.arange(4, 0, -1)]
-            df.loc["Other Non-Current Assets"] = [
-                df.loc["Total Non-Current Assets"][str(i) + "Q" + str(j)] - df.iloc[6:7][str(i) + "Q" + str(j)].sum()
-                for i in np.arange(end, start - 1, -1) for j in np.arange(4, 0, -1)]
+            df.loc["Other Current Assets"] = df.loc["Total Current Assets"] - df.iloc[0:4].sum()
+            df.loc["Other Non-Current Assets"] = df.loc["Total Non-Current Assets"] - df.iloc[6:7].sum()
 
-            df.loc["Other Current Liabilities"] = [
-                df.loc["Total Current Liabilities"][str(i) + "Q" + str(j)] - df.iloc[11:15][str(i) + "Q" + str(j)].sum()
-                for i in np.arange(end, start - 1, -1) for j in np.arange(4, 0, -1)]
-            df.loc["Total Non-Current Liabilities"] = [
-                df.loc["Total Liabilities"][str(i) + "Q" + str(j)] - df.loc["Total Current Liabilities"][
-                    str(i) + "Q" + str(j)].sum() for i in np.arange(end, start - 1, -1) for j in np.arange(4, 0, -1)]
-            df.loc["Non-Debt Long Term Liabilities"] = [
-                df.loc["Total Non-Current Liabilities"][str(i) + "Q" + str(j)] - df.loc["Long-Term Debt"][
-                    str(i) + "Q" + str(j)].sum() for i in np.arange(end, start - 1, -1) for j in np.arange(4, 0, -1)]
+            df.loc["Other Current Liabilities"] = df.loc["Total Current Liabilities"]- df.iloc[11:15].sum()
 
-            df.loc["Accumulated Other Change"] = [
-                df.loc["Stockholder's Equity"][str(i) + "Q" + str(j)] - df.iloc[21:24][str(i) + "Q" + str(j)].sum() for
-                i in np.arange(end, start - 1, -1) for j in np.arange(4, 0, -1)]
-            df.loc["Minority Interest"] = [
-                df.loc["Total Equity"][str(i) + "Q" + str(j)] - df.loc["Stockholder's Equity"][
-                    str(i) + "Q" + str(j)].sum() for i in np.arange(end, start - 1, -1) for j in np.arange(4, 0, -1)]
+            df.loc["Total Non-Current Liabilities"] = df.loc["Total Liabilities"]- df.loc["Total Current Liabilities"]
+            df.loc["Non-Debt Long Term Liabilities"] = df.loc["Total Non-Current Liabilities"] - df.loc["Long-Term Debt"]
+
+            df.loc["Accumulated Other Change"] = df.loc["Stockholder's Equity"] - df.iloc[21:24].sum()
+            df.loc["Minority Interest"] = df.loc["Total Equity"] - df.loc["Stockholder's Equity"]
 
         else:
 
@@ -565,25 +552,16 @@ class Ticker():
             Sense-checking
             """
             df.loc["Total Non-Current Assets"] = df.loc["Total Assets"] - df.loc["Total Current Assets"]
-            print(df.iloc[0:4])
-            df.loc["Other Current Assets"] = [df.loc["Total Current Assets"][i] - df.iloc[0:4][i].sum() for i in
-                                              np.arange(end, start - 1, -1)]
-            df.loc["Other Non-Current Assets"] = [df.loc["Total Non-Current Assets"][i] - df.iloc[6:7][i].sum() for i in
-                                                  np.arange(end, start - 1, -1)]
+            print(df.iloc[0:4].sum())
+            df.loc["Other Current Assets"] = df.loc["Total Current Assets"] - df.iloc[0:4].sum()
+            df.loc["Other Non-Current Assets"] = df.loc["Total Non-Current Assets"] - df.iloc[6:7].sum()
 
-            df.loc["Other Current Liabilities"] = [df.loc["Total Current Liabilities"][i] - df.iloc[11:15][i].sum() for
-                                                   i in np.arange(end, start - 1, -1)]
-            df.loc["Total Non-Current Liabilities"] = [
-                df.loc["Total Liabilities"][i] - df.loc["Total Current Liabilities"][i].sum() for i in
-                np.arange(end, start - 1, -1)]
-            df.loc["Non-Debt Long Term Liabilities"] = [
-                df.loc["Total Non-Current Liabilities"][i] - df.loc["Long-Term Debt"][i].sum() for i in
-                np.arange(end, start - 1, -1)]
+            df.loc["Other Current Liabilities"] = df.loc["Total Current Liabilities"] - df.iloc[11:15].sum()
+            df.loc["Total Non-Current Liabilities"] = df.loc["Total Liabilities"] - df.loc["Total Current Liabilities"]
+            df.loc["Non-Debt Long Term Liabilities"] = df.loc["Total Non-Current Liabilities"] - df.loc["Long-Term Debt"]
 
-            df.loc["Accumulated Other Change"] = [df.loc["Stockholder's Equity"][i] - df.iloc[19:22][i].sum() for i in
-                                                  np.arange(end, start - 1, -1)]
-            df.loc["Minority Interest"] = [df.loc["Total Equity"][i] - df.loc["Stockholder's Equity"][i].sum() for i in
-                                           np.arange(end, start - 1, -1)]
+            df.loc["Accumulated Other Change"] = df.loc["Stockholder's Equity"] - df.iloc[19:22].sum()
+            df.loc["Minority Interest"] = df.loc["Total Equity"] - df.loc["Stockholder's Equity"]
 
         if readable == True:
 
