@@ -430,8 +430,7 @@ class Ticker():
 
                 df1 = df.filter(regex=str(i))  # Filtering for only a year i's items
 
-                totals = [df1.loc[i].sum() for i in
-                          df1.index]  # Summing across income statement items for a given year's quarters
+                totals = df1.loc[i].sum(axis = 1)  # Summing across income statement items for a given year's quarters
 
                 try:
                     position = [True if self.MissingQuarter(df1, i) > 3 else False for i in df1.columns].index(True)
@@ -459,9 +458,7 @@ class Ticker():
 
                     continue
 
-            df.loc["Free Cash Flow"] = [
-                df.loc["Operating Cash Flow"][str(i) + "Q" + str(j)] - df.loc["Capital Expenditures"][
-                    str(i) + "Q" + str(j)] for i in np.arange(end, start - 1, -1) for j in np.arange(4, 0, -1)]
+            df.loc["Free Cash Flow"] = df.loc["Operating Cash Flow"] - df.loc["Capital Expenditures"]
 
         else:
 
@@ -471,8 +468,7 @@ class Ticker():
             df.columns = df.columns.get_level_values(0)
             df.index = df.index.get_level_values(0)
 
-            df.loc["Free Cash Flow"] = [df.loc["Operating Cash Flow"][i] - df.loc["Capital Expenditures"][i] for i in
-                                        np.arange(end, start - 1, -1)]
+            df.loc["Free Cash Flow"] = df.loc["Operating Cash Flow"] - df.loc["Capital Expenditures"]
 
         if readable == True:
 
