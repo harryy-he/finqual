@@ -35,36 +35,25 @@ class Node():
         """
         Returns the root parent node of a given node
         """
-
         while (self.parent != None):
             self = self.parent
 
         return self
 
     def getChildrenNames(self):
-        children = []
-        for i in self.children:
-            children.append(i.name)
-        return children
+        return [child.name for child in self.children]
 
     def getChildrenNodes(self):
-        children = []
-        for i in self.children:
-            children.append(i)
-        return children
+        return self.children
 
     def dfs(self, visited):
         """
         A depth-first search function that takes in a Node class and an empty list "visited", returning a list of all the children of that Node
         """
+        visited.append(self.name)
 
-        children = self.getChildrenNodes()
-
-        for i in children:  # For each child in node
-            if i not in visited:  # If child is not in visited, then append to visited
-                visited.append(i.name)
-                for i in children:  # If child is in visited, then go into that branch
-                    i.dfs(visited)
+        for child in self.children:
+            child.dfs(visited)
 
         return visited
 
@@ -99,10 +88,7 @@ class Ticker():
         value = str(cik.loc[cik["ticker"] == self.ticker]["cik_str"][0])
 
         # Making sure the CIK is of right length
-        append = 10 - len(value)
-
-        for i in range(append):
-            value = "0" + value
+        value = value.zfill(10)
 
         url = 'https://data.sec.gov/api/xbrl/companyfacts/CIK' + value + '.json'
 
@@ -135,7 +121,7 @@ class Ticker():
 
                 df = pd.DataFrame(data["facts"]["us-gaap"][item]["units"]["USD"])
                 df = df.dropna()
-                return df[df["frame"] == search]["val"].iloc[0]
+                return df.at[df[df["frame"] == search].index[0], "val"]
 
             except:
 
@@ -158,7 +144,7 @@ class Ticker():
                 else:
                     search = "CY" + str(year) + "Q" + str(quarter)
 
-                return df[df["frame"] == search]["val"].iloc[0]
+                return df.at[df[df["frame"] == search].index[0], "val"]
 
             except:
 
@@ -191,7 +177,7 @@ class Ticker():
 
                     try:
                         search = "CY" + str(year) + fy
-                        return df[df["frame"] == search]["val"].iloc[0]
+                        return df.at[df[df["frame"] == search].index[0], "val"]
 
                     except:
                         return False
@@ -203,7 +189,6 @@ class Ticker():
         Returns the value of a chosen node at a certain point in time, using a tree-based node system and summing where needed
         """
         check = self.lookup(node, year, category, quarter)
-        # print(node.name + str(check))
 
         if (check != False):
             values.append(check)
@@ -307,8 +292,8 @@ class Ticker():
                     idx = df.columns.get_loc(label)
                     idx_list = [x for x in np.arange(idx, idx + 4)]
                     df1 = df.iloc[:, idx_list]  # Getting the dataframe for the chosen four quarters
-                    totals = [df1.loc[i].sum() for i in
-                              df1.index]  # Summing across income statement items for a given year's quarters
+
+                    totals = df1.sum(axis = 1).values  # Summing across income statement items for a given year's quarters
 
                     """
                     Getting the annual figures for comparison into an "actual" list
@@ -318,13 +303,10 @@ class Ticker():
                     else:
                         annual = list(self.income1(i, i, quarter=False, readable=False, category="cashflow")[i])
 
-                    changed = list(
-                        df.loc[:, label])  # The list of values that are to be changed, i.e. the incorrect column
+                    changed = list(df.loc[:, label])  # The list of values that are to be changed, i.e. the incorrect column
 
-                    diff = [a - b + c for a, b, c in
-                            zip(annual, totals, changed)]  # Reconcile discrepancies and the actual figures
+                    diff = [a - b + c for a, b, c in zip(annual, totals, changed)]  # Reconcile discrepancies and the actual figures
                     df.loc[:, label] = diff
-
 
                 except:
 
@@ -387,7 +369,7 @@ class Ticker():
 
         else:
 
-            # df = df.loc[:, (df != 0).any(axis=0)]
+            df = df.loc[:, (df != 0).any(axis=0)]
             df = df[df.columns.drop(list(df.filter(regex=str(start - 1))))]
             return df
 
@@ -475,13 +457,13 @@ class Ticker():
 
             df = df.applymap(lambda x: '{:,}'.format(x))
             df = df.loc[:, (df != 0).any(axis=0)]
-            df = df.drop(["Capital Expenditures"])
+            df.drop(["Capital Expenditures"], inplace = True)
             return df
 
         else:
 
             df = df.loc[:, (df != 0).any(axis=0)]
-            df = df.drop(["Capital Expenditures"])
+            df.drop(["Capital Expenditures"], inplace = True)
             return df
 
     def balance(self, start, end, quarter=None, readable=None):
