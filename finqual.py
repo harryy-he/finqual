@@ -99,7 +99,7 @@ class Ticker():
 
         return data
 
-    def lookup(self, node, year, category, quarter=None):
+    def lookup(self, node, year, category, quarter = None):
         """
         Looks up items that are under the "us-gaap" taxonomy and are in USD units, this has to be done year by year or quarter
         by quarter as companies may change what they file certain items under
@@ -184,7 +184,7 @@ class Ticker():
             except:
                 return False
 
-    def tree_item(self, node, year, values, attributes, category, quarter=None):
+    def tree_item(self, node, year, values, attributes, category, quarter = None):
         """
         Returns the value of a chosen node at a certain point in time, using a tree-based node system and summing where needed
         """
@@ -195,15 +195,12 @@ class Ticker():
             attributes.append(node.attribute)
 
         else:
-
             [self.tree_item(i, year, values, attributes, category, quarter) for i in node.getChildrenNodes()]
 
         # This is done after checking all the nodes
-
         df = pd.DataFrame(zip(values, attributes), columns=["USD", "Attribute"])
 
         # Sum credits and subtract credits
-
         parent_attribute = node.attribute
 
         if (parent_attribute == "debit"):
@@ -214,94 +211,73 @@ class Ticker():
 
         return value
 
-    def year_tree_item(self, node, start, end, category, quarter=None):
+    def year_tree_item(self, node, start, end, category, quarter = None):
         """
         Returns a given tree_item over a timeframe
         """
-
         year_list = [i for i in np.arange(end, start - 1, -1)]
 
         values = []
 
         if quarter != None:
-
             values = [self.tree_item(node, i, [], [], category, j) for i in year_list for j in np.arange(4, 0, -1)]
 
         else:
-
             values = [self.tree_item(node, i, [], [], category) for i in year_list]
 
         return values
 
-    def income(self, start, end, quarter=None, readable=None, category="cashflow"):
-
-        if quarter != None and readable != None:
-            df = self.income1(start, end, quarter=True, readable=True, category="cashflow")
-        elif quarter != None and readable == None:
-            df = self.income1(start, end, quarter=True, readable=None, category="cashflow")
-        elif quarter == None and readable != None:
-            df = self.income1(start, end, quarter=None, readable=None, category="cashflow")
-        else:
-            df = self.income1(start, end, quarter=None, readable=None, category="cashflow")
-
+    def income(self, start, end, category = "cashflow", quarter = None, readable = None):
+        df = self.income_helper(start, end, category, quarter, readable)
         df = df.drop(["Cost and Expenses", "Interest Expense", "Depreciation and Amortization"])
 
         return df
 
-    def income1(self, start, end, quarter=None, readable=None, category="cashflow"):
+    def income_helper(self, start, end, category, quarter = None, readable = None):
         """
         Creating list of years and quarters for columns
         """
         year_list = [i for i in np.arange(end, start - 2, -1)]
-
         quarter_list = [str(i) + "Q" + str(j) for i in year_list for j in np.arange(4, 0, -1)]
-
         """
         Creating list of income statement items and their names
         """
-        nodes = [rev, cor, gp, opex, ce, oi, noi, pti, tax, ni, cce5_2, ide1_1]
-
+        nodes = [rev, cor, gp, opex, ce,
+                 oi,
+                 noi, pti, tax, ni, cce5_2,
+                 ide1_1]
         node_names = ["Revenues", "Cost of Revenue", "Gross Profit", "Operating Expenses", "Cost and Expenses",
                       "Operating Profit"
                      ,"Non-Operating Income/Expense", "Pretax Profit", "Tax", "Net Profit", "Depreciation and Amortization"
                      ,"Interest Expense"]
-
         """
         Appending each node values for each year to a data
         """
         if quarter == True:
-            data = [self.year_tree_item(i, start - 1, end, quarter=True, category="cashflow") for i in nodes]
-            df = pd.DataFrame(data, index=[node_names], columns=[quarter_list])
+            data = [self.year_tree_item(i, start - 1, end, category, quarter) for i in nodes]
+            df = pd.DataFrame(data, index = [node_names], columns = [quarter_list])
 
             df.columns = df.columns.get_level_values(0)
             df.index = df.index.get_level_values(0)
-
             """
             Get the missing quarter stuff, some zeros will be replaced at sense-checking stage, the zeros will signify the quarter that the company reports in
             """
-
             for i in np.arange(start, end + 1):
-
                 df1 = df.filter(regex=str(i))  # Filtering for only a year i's items
-
                 try:
                     position = [True if self.MissingQuarter(df1, i) > 3 else False for i in df1.columns].index(True)
-
                     label = df1.columns[position]  # Getting the column name of the label
-                    # Getting the last four quarters from label backwards, using the original dataframe
                     idx = df.columns.get_loc(label)
-                    idx_list = [x for x in np.arange(idx, idx + 4)]
+                    idx_list = [x for x in np.arange(idx, idx + 4)]   # Getting the last four quarters from label backwards by index
                     df1 = df.iloc[:, idx_list]  # Getting the dataframe for the chosen four quarters
-
                     totals = df1.sum(axis = 1).values  # Summing across income statement items for a given year's quarters
-
                     """
                     Getting the annual figures for comparison into an "actual" list
                     """
                     if readable == True:
-                        annual = [int(x.replace(',', '')) for x in self.income1(i, i, quarter=False, readable=True, category="cashflow")[i]]
+                        annual = [int(x.replace(',', '')) for x in self.income_helper(i, i, category = "cashflow", quarter = False, readable = True)[i]]
                     else:
-                        annual = list(self.income1(i, i, quarter=False, readable=False, category="cashflow")[i])
+                        annual = list(self.income_helper(i, i, category = "cashflow", quarter = False, readable = False)[i])
 
                     changed = list(df.loc[:, label])  # The list of values that are to be changed, i.e. the incorrect column
 
@@ -312,63 +288,40 @@ class Ticker():
 
                     continue
 
-            """
-            Sense-checking
-            """
-
-            df.loc["Cost of Revenue"] = df.loc["Revenues"] - df.loc["Gross Profit"]
-
-            df.loc["Operating Expenses"] = df.loc["Gross Profit"] - df.loc["Operating Profit"]
-
-            df.loc["Non-Operating Income/Expense"] = df.loc["Pretax Profit"] - df.loc["Operating Profit"]
-
-            df.loc["EBIT"] = df.loc["Net Profit"] + df.loc["Tax"] + df.loc["Interest Expense"]
-
-            df.loc["EBITDA"] = df.loc["EBIT"] + df.loc["Depreciation and Amortization"]
-
         else:
 
-            data = [self.year_tree_item(i, start - 1, end, category="cashflow") for i in nodes]
+            data = [self.year_tree_item(i, start - 1, end, category = "cashflow") for i in nodes]
             df = pd.DataFrame(data, index=[node_names], columns=[year_list])
 
             df.columns = df.columns.get_level_values(0)
             df.index = df.index.get_level_values(0)
 
-            """
-            Sense-checking
-            """
+        """
+        Sense-checking
+        """
 
-            df.loc["Cost of Revenue"] = df.loc["Revenues"] - df.loc["Gross Profit"]
+        df.loc["Cost of Revenue"] = df.loc["Revenues"] - df.loc["Gross Profit"]
 
-            for i in df.columns:
-                if (df.loc["Cost of Revenue", i] == 0 and df.loc["Cost and Expenses", i] != 0 and df.loc[
-                    "Operating Expenses", i] != 0):
-                    df.loc["Cost of Revenue", i] = df.loc["Cost and Expenses", i] - df.loc["Operating Expenses", i]
+        mask = (df.loc["Cost of Revenue"] == 0) & (df.loc["Cost and Expenses"] != 0) & (df.loc["Operating Expenses"] != 0)
+        df.loc["Cost of Revenue", mask] = df.loc["Cost and Expenses", mask] - df.loc["Operating Expenses", mask]
 
-            df.loc["Gross Profit"] = df.loc["Revenues"] - df.loc["Cost of Revenue"]
+        df.loc["Gross Profit"] = df.loc["Revenues"] - df.loc["Cost of Revenue"]
 
-            for i in df.columns:
-                if (df.loc["Operating Profit", i] == 0 and df.loc["Operating Expenses", i] != 0 and df.loc[
-                    "Gross Profit", i] != 0):
-                    df.loc["Operating Profit", i] = df.loc["Gross Profit", i] - df.loc["Operating Expenses", i]
+        mask = (df.loc["Operating Profit"] == 0) & (df.loc["Operating Expenses"] != 0) & (df.loc["Gross Profit"] != 0)
+        df.loc["Operating Profit", mask] = df.loc["Gross Profit", mask] - df.loc["Operating Expenses", mask]
 
-            df.loc["Operating Expenses"] = df.loc["Gross Profit"] - df.loc["Operating Profit"]
-
-            df.loc["Non-Operating Income/Expense"] = df.loc["Pretax Profit"] - df.loc["Operating Profit"]
-
-            df.loc["EBIT"] = df.loc["Net Profit"] + df.loc["Tax"] + df.loc["Interest Expense"]
-
-            df.loc["EBITDA"] = df.loc["EBIT"] + df.loc["Depreciation and Amortization"]
+        df.loc["Operating Expenses"] = df.loc["Gross Profit"] - df.loc["Operating Profit"]
+        df.loc["Non-Operating Income/Expense"] = df.loc["Pretax Profit"] - df.loc["Operating Profit"]
+        df.loc["EBIT"] = df.loc["Net Profit"] + df.loc["Tax"] + df.loc["Interest Expense"]
+        df.loc["EBITDA"] = df.loc["EBIT"] + df.loc["Depreciation and Amortization"]
 
         if readable == True:
-
             df = df.applymap(lambda x: '{:,}'.format(x))
             df = df.loc[:, (df != 0).any(axis=0)]
             df = df[df.columns.drop(list(df.filter(regex=str(start - 1))))]
             return df
 
         else:
-
             df = df.loc[:, (df != 0).any(axis=0)]
             df = df[df.columns.drop(list(df.filter(regex=str(start - 1))))]
             return df
@@ -387,18 +340,14 @@ class Ticker():
         Creating list of years and quarters for columns
         """
         year_list = [i for i in np.arange(end, start - 1, -1)]
-
         quarter_list = [str(i) + "Q" + str(j) for i in year_list for j in np.arange(4, 0, -1)]
-
         """
         Creating list of income statement items and their names
         """
-
         nodes = [cce2_3, cce2_4, cce2_5, cce1_1, cce1, cce4_8]
 
         node_names = ["Operating Cash Flow", "Investing Cash Flow", "Financing Cash Flow",
                       "Effect of Exchange Rate on Cash", "End Cash Position", "Capital Expenditures"]
-
         """
         Appending each node values for each year to a data
         """
@@ -410,38 +359,27 @@ class Ticker():
             df.index = df.index.get_level_values(0)
 
             for i in np.arange(start, end + 1):
-
                 df1 = df.filter(regex=str(i))  # Filtering for only a year i's items
-
                 totals = df1.loc[i].sum(axis = 1)  # Summing across income statement items for a given year's quarters
 
                 try:
                     position = [True if self.MissingQuarter(df1, i) > 3 else False for i in df1.columns].index(True)
-
                     label = df1.columns[position]  # Getting the column name of the label
-
                     """
                     Getting the annual figures for comparison into an "actual" list
                     """
                     if readable == True:
-                        annual = [int(x.replace(',', '')) for x in
-                                  self.cashflow(i, i, quarter=False, readable=True, category="cashflow")[i]]
+                        annual = [int(x.replace(',', '')) for x in self.cashflow(i, i, quarter=False, readable=True, category="cashflow")[i]]
                     else:
                         annual = list(self.cashflow(i, i, quarter=False, readable=False, category="cashflow")[i])
 
-                    changed = list(
-                        df1.iloc[:, position])  # The list of values that are to be changed, i.e. the incorrect column
-
-                    diff = [a - b - c for a, b, c in
-                            zip(annual, totals, changed)]  # Reconcile discrepancies and the actual figures
-
+                    changed = list(df1.iloc[:, position])  # The list of values that are to be changed, i.e. the incorrect column
+                    diff = [a - b - c for a, b, c in zip(annual, totals, changed)]  # Reconcile discrepancies and the actual figures
                     df.loc[:, label] = diff
 
                 except:
 
                     continue
-
-            df.loc["Free Cash Flow"] = df.loc["Operating Cash Flow"] - df.loc["Capital Expenditures"]
 
         else:
 
@@ -451,7 +389,7 @@ class Ticker():
             df.columns = df.columns.get_level_values(0)
             df.index = df.index.get_level_values(0)
 
-            df.loc["Free Cash Flow"] = df.loc["Operating Cash Flow"] - df.loc["Capital Expenditures"]
+        df.loc["Free Cash Flow"] = df.loc["Operating Cash Flow"] - df.loc["Capital Expenditures"]
 
         if readable == True:
 
@@ -471,7 +409,6 @@ class Ticker():
         Creating list of years and quarters for columns
         """
         year_list = [i for i in np.arange(end, start - 1, -1)]
-
         quarter_list = [str(i) + "Q" + str(j) for i in year_list for j in np.arange(4, 0, -1)]
 
         """
@@ -506,21 +443,6 @@ class Ticker():
             df.columns = df.columns.get_level_values(0)  # Resetting to flat index
             df.index = df.index.get_level_values(0)  # Resetting to flat index
 
-            """
-            Sense-checking
-            """
-            df.loc["Total Non-Current Assets"] = df.loc["Total Assets"] - df.loc["Total Current Assets"]
-            df.loc["Other Current Assets"] = df.loc["Total Current Assets"] - df.iloc[0:4].sum()
-            df.loc["Other Non-Current Assets"] = df.loc["Total Non-Current Assets"] - df.iloc[6:7].sum()
-
-            df.loc["Other Current Liabilities"] = df.loc["Total Current Liabilities"]- df.iloc[11:15].sum()
-
-            df.loc["Total Non-Current Liabilities"] = df.loc["Total Liabilities"]- df.loc["Total Current Liabilities"]
-            df.loc["Non-Debt Long Term Liabilities"] = df.loc["Total Non-Current Liabilities"] - df.loc["Long-Term Debt"]
-
-            df.loc["Accumulated Other Change"] = df.loc["Stockholder's Equity"] - df.iloc[21:24].sum()
-            df.loc["Minority Interest"] = df.loc["Total Equity"] - df.loc["Stockholder's Equity"]
-
         else:
 
             data = [self.year_tree_item(i, start, end, category = "balance") for i in nodes]
@@ -530,19 +452,19 @@ class Ticker():
             df.columns = df.columns.get_level_values(0)
             df.index = df.index.get_level_values(0)
 
-            """
-            Sense-checking
-            """
-            df.loc["Total Non-Current Assets"] = df.loc["Total Assets"] - df.loc["Total Current Assets"]
-            df.loc["Other Current Assets"] = df.loc["Total Current Assets"] - df.iloc[0:4].sum()
-            df.loc["Other Non-Current Assets"] = df.loc["Total Non-Current Assets"] - df.iloc[6:7].sum()
+        """
+        Sense-checking
+        """
+        df.loc["Total Non-Current Assets"] = df.loc["Total Assets"] - df.loc["Total Current Assets"]
+        df.loc["Other Current Assets"] = df.loc["Total Current Assets"] - df.iloc[0:4].sum()
+        df.loc["Other Non-Current Assets"] = df.loc["Total Non-Current Assets"] - df.iloc[6:7].sum()
 
-            df.loc["Other Current Liabilities"] = df.loc["Total Current Liabilities"] - df.iloc[11:15].sum()
-            df.loc["Total Non-Current Liabilities"] = df.loc["Total Liabilities"] - df.loc["Total Current Liabilities"]
-            df.loc["Non-Debt Long Term Liabilities"] = df.loc["Total Non-Current Liabilities"] - df.loc["Long-Term Debt"]
+        df.loc["Other Current Liabilities"] = df.loc["Total Current Liabilities"] - df.iloc[11:15].sum()
+        df.loc["Total Non-Current Liabilities"] = df.loc["Total Liabilities"] - df.loc["Total Current Liabilities"]
+        df.loc["Non-Debt Long Term Liabilities"] = df.loc["Total Non-Current Liabilities"] - df.loc["Long-Term Debt"]
 
-            df.loc["Accumulated Other Change"] = df.loc["Stockholder's Equity"] - df.iloc[19:22].sum()
-            df.loc["Minority Interest"] = df.loc["Total Equity"] - df.loc["Stockholder's Equity"]
+        df.loc["Accumulated Other Change"] = df.loc["Stockholder's Equity"] - df.iloc[19:22].sum()
+        df.loc["Minority Interest"] = df.loc["Total Equity"] - df.loc["Stockholder's Equity"]
 
         if readable == True:
 
