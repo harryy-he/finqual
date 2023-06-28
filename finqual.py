@@ -67,7 +67,7 @@ class Ticker():
         self.data = self.SEC()
 
     @ratelimit.sleep_and_retry
-    @ratelimit.limits(calls = 9, period = 1)
+    @ratelimit.limits(calls = 10, period = 1)
     def SEC(self):
         """
         Function to get a Pandas dataframe from the SEC API of a chosen ticker
@@ -97,7 +97,7 @@ class Ticker():
         data = source.json()
         data = pd.DataFrame(data)
 
-        return data
+        return data["facts"]["us-gaap"]
 
     def lookup(self, node, year, category, quarter = None):
         """
@@ -119,9 +119,9 @@ class Ticker():
             """
             try:
 
-                df = pd.DataFrame(data["facts"]["us-gaap"][item]["units"]["USD"])
-                df = df.dropna()
-                return df.at[df[df["frame"] == search].index[0], "val"]
+                df = pd.DataFrame(data[item]["units"]["USD"])
+                df.dropna(inplace = True)
+                return df.loc[df["frame"] == search, "val"].iat[0]
 
             except:
 
@@ -134,8 +134,8 @@ class Ticker():
             """
             try:
 
-                df = pd.DataFrame(data["facts"]["us-gaap"][item]["units"]["USD"])
-                df = df.dropna()
+                df = pd.DataFrame(data[item]["units"]["USD"])
+                df.dropna(inplace = True)
                 df["frame"] = df["frame"].str.replace('I', '')
                 fy = df[df["fp"] == "FY"].iloc[-1][7][-2:]
 
@@ -144,7 +144,7 @@ class Ticker():
                 else:
                     search = "CY" + str(year) + "Q" + str(quarter)
 
-                return df.at[df[df["frame"] == search].index[0], "val"]
+                return df.loc[df["frame"] == search, "val"].iat[0]
 
             except:
 
@@ -153,8 +153,8 @@ class Ticker():
         if (category == "cashflow"):
 
             try:
-                df = pd.DataFrame(data["facts"]["us-gaap"][item]["units"]["USD"])
-                df = df.dropna()
+                df = pd.DataFrame(data[item]["units"]["USD"])
+                df.dropna(inplace = True)
                 df["frame"] = df["frame"].str.replace('I', '')
 
                 try:
@@ -165,19 +165,19 @@ class Ticker():
                 if (quarter != None):
                     # If looking at quarter then:
                     search = "CY" + str(year) + "Q" + str(quarter)
-                    return df[df["frame"] == search]["val"].iloc[0]
+                    return df.loc[df["frame"] == search, "val"].iat[0]
 
                 else:
                     try:
                         search = "CY" + str(year)
-                        return df[df["frame"] == search]["val"].iloc[0]
+                        return df.loc[df["frame"] == search, "val"].iat[0]
 
                     except:
                         pass
 
                     try:
                         search = "CY" + str(year) + fy
-                        return df.at[df[df["frame"] == search].index[0], "val"]
+                        return df.loc[df["frame"] == search, "val"].iat[0]
 
                     except:
                         return False
@@ -216,7 +216,6 @@ class Ticker():
         Returns a given tree_item over a timeframe
         """
         year_list = [i for i in np.arange(end, start - 1, -1)]
-
         values = []
 
         if quarter != None:
@@ -228,6 +227,7 @@ class Ticker():
         return values
 
     def income(self, start, end, category = "cashflow", quarter = None, readable = None):
+
         df = self.income_helper(start, end, category, quarter, readable)
         df = df.drop(["Cost and Expenses", "Interest Expense", "Depreciation and Amortization"])
 
@@ -270,6 +270,7 @@ class Ticker():
                     idx = df.columns.get_loc(label)
                     idx_list = [x for x in np.arange(idx, idx + 4)]   # Getting the last four quarters from label backwards by index
                     df1 = df.iloc[:, idx_list]  # Getting the dataframe for the chosen four quarters
+
                     totals = df1.sum(axis = 1).values  # Summing across income statement items for a given year's quarters
                     """
                     Getting the annual figures for comparison into an "actual" list
@@ -318,12 +319,12 @@ class Ticker():
         if readable == True:
             df = df.applymap(lambda x: '{:,}'.format(x))
             df = df.loc[:, (df != 0).any(axis=0)]
-            df = df[df.columns.drop(list(df.filter(regex=str(start - 1))))]
+            df.drop(df.filter(regex=str(start - 1)).columns, axis=1, inplace=True)
             return df
 
         else:
-            df = df.loc[:, (df != 0).any(axis=0)]
-            df = df[df.columns.drop(list(df.filter(regex=str(start - 1))))]
+            df = df.loc[:, (df != 0).any(axis=0)] #Remove columns that have all zeros
+            df.drop(df.filter(regex=str(start - 1)).columns, axis=1, inplace=True)
             return df
 
     def MissingQuarter(self, df, column):
@@ -404,7 +405,7 @@ class Ticker():
             df.drop(["Capital Expenditures"], inplace = True)
             return df
 
-    def balance(self, start, end, quarter=None, readable=None):
+    def balance(self, start, end, quarter = None, readable = None):
         """
         Creating list of years and quarters for columns
         """
