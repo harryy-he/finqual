@@ -64,7 +64,80 @@ class Ticker():
 
     def __init__(self, ticker):
         self.ticker = ticker
+        self.cik = self.CIK()
         self.data = self.SEC()
+        self.fiscal = self.fiscal_year()
+
+    def CIK(self):
+        headers = {"Accept": "application/json, text/plain, */*", "Accept-Encoding": "gzip, deflate, br",
+                   "Accept-Language": "en-US,en;q=0.9",
+                   "Origin": "https://www.nasdaq.com",
+                   "Referer": "https://www.nasdaq.com",
+                   "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36"}
+
+        source = requests.get(url="https://www.sec.gov/files/company_tickers.json", headers=headers, verify=True)
+        cik = source.json()
+        cik = pd.DataFrame(cik)
+        cik = cik.transpose()
+
+        value = str(cik.loc[cik["ticker"] == self.ticker]["cik_str"][0])
+
+        # Making sure the CIK is of right length
+        value = value.zfill(10)
+
+        return value
+
+    def is_date_between(self, date, q):
+
+        start_date = q[0]
+        end_date = q[1]
+
+        date_month = date.month
+        date_day = date.day
+
+        start_month = start_date.month
+        start_day = start_date.day
+
+        end_month = end_date.month
+        end_day = end_date.day
+
+        if start_month < end_month:
+            return (start_month, start_day) <= (date_month, date_day) <= (end_month, end_day)
+        elif start_month > end_month:
+            return (start_month, start_day) <= (date_month, date_day) or (date_month, date_day) <= (end_month, end_day)
+        else:  # start_month == end_month
+            if start_day <= end_day:
+                return (start_month, start_day) <= (date_month, date_day) <= (end_month, end_day)
+            else:  # Handle wraparound from end of year to start of year
+                return (start_month, start_day) <= (date_month, date_day) or (date_month, date_day) <= (
+                    end_month, end_day)
+
+    def date_quarter(self, date, q1, q2, q3, q4):
+        quarter_list = [(q1, 1), (q2, 2), (q3, 3), (q4, 4)]
+        for quarter, quarter_num in quarter_list:
+            if self.is_date_between(date, quarter):
+                return quarter_num
+        return None
+
+    def fiscal_year(self):
+
+        headers = {"Accept": "application/json, text/plain, */*", "Accept-Encoding": "gzip, deflate, br",
+                   "Accept-Language": "en-US,en;q=0.9",
+                   "Origin": "https://www.nasdaq.com",
+                   "Referer": "https://www.nasdaq.com",
+                   "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36"}
+
+        source = requests.get(url="https://data.sec.gov/submissions/CIK" + self.cik + ".json", headers=headers, verify=True)
+        data = source.json()
+        end = data["fiscalYearEnd"]
+        fiscal_end = datetime.datetime.strptime(end, "%m%d")
+
+        q4 = [fiscal_end + datetime.timedelta(days=-14), fiscal_end + datetime.timedelta(days=14)]
+        q1 = [q4[0] + datetime.timedelta(days=76), q4[1] + datetime.timedelta(days=104)]
+        q2 = [q1[0] + datetime.timedelta(days=76), q1[1] + datetime.timedelta(days=104)]
+        q3 = [q2[0] + datetime.timedelta(days=76), q2[1] + datetime.timedelta(days=104)]
+
+        return q1, q2, q3, q4
 
     @ratelimit.sleep_and_retry
     @ratelimit.limits(calls = 10, period = 1)
@@ -111,20 +184,37 @@ class Ticker():
             """
             Creating search term
             """
-            search = "CY" + str(year)
-            if (quarter != None):
-                search = search + "Q" + str(quarter)
-            """
-            Getting the desired item value
-            """
-            try:
 
+            try:
                 df = pd.DataFrame(data[item]["units"]["USD"])
                 df.dropna(inplace = True)
-                return df.loc[df["frame"] == search, "val"].iat[0]
+                df["frame"] = df["frame"].str.replace('I', '')
 
+                try:
+                    fy = df[df["fp"] == "FY"].iloc[-1][7][-2:]
+                except:
+                    fy = None
+
+                if (quarter != None):
+                    # If looking at quarter then:
+                    search = "CY" + str(year) + "Q" + str(quarter)
+                    return df.loc[df["frame"] == search, "val"].iat[0]
+
+                else:
+                    try:
+                        search = "CY" + str(year)
+                        return df.loc[df["frame"] == search, "val"].iat[0]
+
+                    except:
+                        pass
+
+                    try:
+                        search = "CY" + str(year) + fy
+                        return df.loc[df["frame"] == search, "val"].iat[0]
+
+                    except:
+                        return False
             except:
-
                 return False
 
         if (category == "balance"):
@@ -180,9 +270,45 @@ class Ticker():
                         return df.loc[df["frame"] == search, "val"].iat[0]
 
                     except:
-                        return False
+                        pass
             except:
-                return False
+                pass
+
+            try:
+                df = pd.DataFrame(data[item]["units"]["USD"])
+                df['end'] = pd.to_datetime(df["end"], format='%Y-%m-%d')
+                df['start'] = pd.to_datetime(df["start"], format='%Y-%m-%d')
+                df.drop_duplicates(subset=['start', "end"], inplace=True, keep="last")
+                df["difference_days"] = (df["end"] - df["start"]).dt.days
+                df["flag"] = df["difference_days"].between(76, 104)
+
+                df["year"] = df['end'].dt.year
+                q = self.fiscal
+                df["quarter"] = df.apply(lambda x: self.date_quarter(x["end"], q[0], q[1], q[2], q[3]), axis=1)
+                df["quarter_frame"] = df["year"].astype(str) + "Q" + df["quarter"].astype(str)
+
+                df['frame'] = np.where(df['difference_days'].between(350, 380), df['year'].astype(str), np.nan)
+                df.sort_values(['year', 'quarter', 'flag'], inplace=True)
+                df.drop_duplicates(subset=['year', "quarter"], inplace=True, keep="last")
+
+                """
+                Calculating the quarter_vals
+                """
+                df.loc[~df['flag'], 'quarter_val'] = df.groupby('year')['val'].diff(periods=1)
+                df.loc[df['quarter_val'].isnull(), 'quarter_val'] = df['val']
+                df["quarter_val"] = df["quarter_val"].astype(np.int64)
+                df.reset_index(drop=True, inplace=True)
+
+                if (quarter == None):
+                    search = str(year)
+                    return df.loc[df["frame"] == search, "val"].iat[0]
+                else:
+                    search = str(year) + "Q" + str(quarter)
+                    return df.loc[df["quarter_frame"] == search, "quarter_val"].iat[0]
+
+            except:
+                    return False
+
 
     def tree_item(self, node, year, values, attributes, category, quarter = None):
         """
@@ -226,7 +352,7 @@ class Ticker():
 
         return values
 
-    def income(self, start, end, category = "cashflow", quarter = None, readable = None):
+    def income(self, start, end, category = "income", quarter = None, readable = None):
 
         df = self.income_helper(start, end, category, quarter, readable)
         df = df.drop(["Cost and Expenses", "Interest Expense", "Depreciation and Amortization"])
@@ -276,9 +402,9 @@ class Ticker():
                     Getting the annual figures for comparison into an "actual" list
                     """
                     if readable == True:
-                        annual = [int(x.replace(',', '')) for x in self.income_helper(i, i, category = "cashflow", quarter = False, readable = True)[i]]
+                        annual = [int(x.replace(',', '')) for x in self.income_helper(i, i, category = "income", quarter = False, readable = True)[i]]
                     else:
-                        annual = list(self.income_helper(i, i, category = "cashflow", quarter = False, readable = False)[i])
+                        annual = list(self.income_helper(i, i, category = "income", quarter = False, readable = False)[i])
 
                     changed = list(df.loc[:, label])  # The list of values that are to be changed, i.e. the incorrect column
 
@@ -291,7 +417,7 @@ class Ticker():
 
         else:
 
-            data = [self.year_tree_item(i, start - 1, end, category = "cashflow") for i in nodes]
+            data = [self.year_tree_item(i, start - 1, end, category = "income") for i in nodes]
             df = pd.DataFrame(data, index=[node_names], columns=[year_list])
 
             df.columns = df.columns.get_level_values(0)
@@ -353,56 +479,28 @@ class Ticker():
         Appending each node values for each year to a data
         """
         if quarter == True:
-            data = [self.year_tree_item(i, start, end, quarter=True, category="cashflow") for i in nodes]
-            df = pd.DataFrame(data, index=[node_names], columns=[quarter_list])
+            data = [self.year_tree_item(i, start, end, quarter = True, category = "cashflow") for i in nodes]
+            df = pd.DataFrame(data, index = [node_names], columns = [quarter_list])
 
             df.columns = df.columns.get_level_values(0)
             df.index = df.index.get_level_values(0)
 
-            for i in np.arange(start, end + 1):
-                df1 = df.filter(regex=str(i))  # Filtering for only a year i's items
-                totals = df1.loc[i].sum(axis = 1)  # Summing across income statement items for a given year's quarters
-
-                try:
-                    position = [True if self.MissingQuarter(df1, i) > 3 else False for i in df1.columns].index(True)
-                    label = df1.columns[position]  # Getting the column name of the label
-                    """
-                    Getting the annual figures for comparison into an "actual" list
-                    """
-                    if readable == True:
-                        annual = [int(x.replace(',', '')) for x in self.cashflow(i, i, quarter=False, readable=True, category="cashflow")[i]]
-                    else:
-                        annual = list(self.cashflow(i, i, quarter=False, readable=False, category="cashflow")[i])
-
-                    changed = list(df1.iloc[:, position])  # The list of values that are to be changed, i.e. the incorrect column
-                    diff = [a - b - c for a, b, c in zip(annual, totals, changed)]  # Reconcile discrepancies and the actual figures
-                    df.loc[:, label] = diff
-
-                except:
-
-                    continue
-
         else:
 
-            data = [self.year_tree_item(i, start, end, category="cashflow") for i in nodes]
-            df = pd.DataFrame(data, index=[node_names], columns=[year_list])
+            data = [self.year_tree_item(i, start, end, category = "cashflow") for i in nodes]
+            df = pd.DataFrame(data, index = [node_names], columns = [year_list])
 
             df.columns = df.columns.get_level_values(0)
             df.index = df.index.get_level_values(0)
 
         df.loc["Free Cash Flow"] = df.loc["Operating Cash Flow"] - df.loc["Capital Expenditures"]
+        df.drop(["Capital Expenditures"], inplace=True)
+        df = df.loc[:, (df != 0).any(axis=0)]
 
         if readable == True:
-
             df = df.applymap(lambda x: '{:,}'.format(x))
-            df = df.loc[:, (df != 0).any(axis=0)]
-            df.drop(["Capital Expenditures"], inplace = True)
             return df
-
         else:
-
-            df = df.loc[:, (df != 0).any(axis=0)]
-            df.drop(["Capital Expenditures"], inplace = True)
             return df
 
     def balance(self, start, end, quarter = None, readable = None):
@@ -537,6 +635,7 @@ class Ticker():
         company_list["ev/ebitda"] = company_list["enterprise value"] / company_list["ebitda"]
 
         return company_list
+
 
 """
 Net Income
@@ -1901,33 +2000,26 @@ se4_3 = Node("DefinedBenefitPlanAccumulatedOtherComprehensiveIncomeNetTransition
              attribute="credit", parent=se3_8)
 
 """
-Cash and Cash Equivalents
+Cash and Cash Equivalents - Cashflow
 """
 # Level 0
 cce = Node("CashAndCashEquivalentsPeriodIncreaseDecrease", attribute="debit")
 
 # End-cash position
 cce1 = Node("CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents", attribute="debit")
-cce2 = Node(
-    "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalentsIncludingDisposalGroupAndDiscontinuedOperations",
-    attribute="debit", parent=cce1)
+cce2 = Node("CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalentsIncludingDisposalGroupAndDiscontinuedOperations", attribute="debit", parent=cce1)
 
 # Level 1
 
-cce1_1 = Node(
-    "EffectOfExchangeRateOnCashCashEquivalentsRestrictedCashAndRestrictedCashEquivalentsIncludingDisposalGroupAndDiscontinuedOperations",
-    attribute="debit", parent=cce)
+cce1_1 = Node("EffectOfExchangeRateOnCashCashEquivalentsRestrictedCashAndRestrictedCashEquivalentsIncludingDisposalGroupAndDiscontinuedOperations", attribute="debit", parent=cce)
 cce1_3 = Node("EffectOfExchangeRateOnCashAndCashEquivalents", attribute="debit", parent=cce1_1)
 
 cce1_2 = Node("CashAndCashEquivalentsPeriodIncreaseDecreaseExcludingExchangeRateEffect", attribute="debit", parent=cce)
 
 # Level 2
 
-cce2_1 = Node("EffectOfExchangeRateOnCashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents", attribute="debit",
-              parent=cce1_3)
-cce2_2 = Node(
-    "EffectOfExchangeRateOnCashCashEquivalentsRestrictedCashAndRestrictedCashEquivalentsDisposalGroupIncludingDiscontinuedOperations",
-    attribute="debit", parent=cce2_1)
+cce2_1 = Node("EffectOfExchangeRateOnCashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents", attribute="debit", parent=cce1_3)
+cce2_2 = Node("EffectOfExchangeRateOnCashCashEquivalentsRestrictedCashAndRestrictedCashEquivalentsDisposalGroupIncludingDiscontinuedOperations", attribute="debit", parent=cce2_1)
 
 cce2_3 = Node("NetCashProvidedByUsedInOperatingActivities", attribute="debit", parent=cce1_2)
 cce2_4 = Node("NetCashProvidedByUsedInInvestingActivities", attribute="debit", parent=cce1_2)
@@ -1954,8 +2046,7 @@ cce4_1 = Node("IncomeLossIncludingPortionAttributableToNoncontrollingInterest", 
 cce4_2 = Node("IncomeTaxExpenseBenefitContinuingOperationsDiscontinuedOperationsExtraordinaryItems", attribute="debit",
               parent=cce3_1)
 
-cce4_3 = Node("AdjustmentsNoncashItemsToReconcileNetIncomeLossToCashProvidedByUsedInOperatingActivities",
-              attribute="debit", parent=cce3_2)
+cce4_3 = Node("AdjustmentsNoncashItemsToReconcileNetIncomeLossToCashProvidedByUsedInOperatingActivities", attribute="debit", parent=cce3_2)
 cce4_4 = Node("PaymentsForProceedsFromTenantAllowance", attribute="credit", parent=cce3_2)
 cce4_5 = Node("PaymentsForProceedsFromOtherDeposits", attribute="credit", parent=cce3_2)
 cce4_6 = Node("IncreaseDecreaseInOperatingCapital", attribute="credit", parent=cce3_2)
