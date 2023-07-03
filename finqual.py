@@ -241,41 +241,37 @@ class Ticker():
                 return False
 
         if (category == "cashflow"):
-
             try:
                 df = pd.DataFrame(data[item]["units"]["USD"])
-                df.dropna(inplace = True)
-                df["frame"] = df["frame"].str.replace('I', '')
-
-                try:
-                    fy = df[df["fp"] == "FY"].iloc[-1][7][-2:]
-                except:
-                    fy = None
-
-                if (quarter != None):
-                    # If looking at quarter then:
-                    search = "CY" + str(year) + "Q" + str(quarter)
-                    return df.loc[df["frame"] == search, "val"].iat[0]
-
-                else:
-                    try:
-                        search = "CY" + str(year)
-                        return df.loc[df["frame"] == search, "val"].iat[0]
-
-                    except:
-                        pass
-
-                    try:
-                        search = "CY" + str(year) + fy
-                        return df.loc[df["frame"] == search, "val"].iat[0]
-
-                    except:
-                        pass
             except:
-                pass
+                return False
 
-            try:
-                df = pd.DataFrame(data[item]["units"]["USD"])
+            if (df.shape[1] == 8):
+                print(node.name)
+                df.drop_duplicates(subset=["end", "val"], inplace=True, keep="last")
+                df['end'] = pd.to_datetime(df["end"], format='%Y-%m-%d')
+
+                df["year"] = df['end'].dt.year
+                q = self.fiscal
+                df["quarter"] = df.apply(lambda x: self.date_quarter(x["end"], q[0], q[1], q[2], q[3]), axis=1)
+                df["quarter_frame"] = df["year"].astype(str) + "Q" + df["quarter"].astype(str)
+
+                display(df.tail())
+                if (quarter == None):
+                    search = str(year) + "Q" + str(4)
+                    try:
+                        return df.loc[df["quarter_frame"] == search, "val"].iat[0]
+                    except:
+                        return False
+                else:
+                    search = str(year) + "Q" + str(quarter)
+                    try:
+                        return df.loc[df["quarter_frame"] == search, "val"].iat[0]
+                    except:
+                        return False
+
+            else:
+                # print(node.name)
                 df['end'] = pd.to_datetime(df["end"], format='%Y-%m-%d')
                 df['start'] = pd.to_datetime(df["start"], format='%Y-%m-%d')
                 df.drop_duplicates(subset=['start', "end"], inplace=True, keep="last")
@@ -299,15 +295,20 @@ class Ticker():
                 df["quarter_val"] = df["quarter_val"].astype(np.int64)
                 df.reset_index(drop=True, inplace=True)
 
+                # display(df.tail())
+
                 if (quarter == None):
                     search = str(year)
-                    return df.loc[df["frame"] == search, "val"].iat[0]
+                    try:
+                        return df.loc[df["frame"] == search, "val"].iat[0]
+                    except:
+                        return False
                 else:
                     search = str(year) + "Q" + str(quarter)
-                    return df.loc[df["quarter_frame"] == search, "quarter_val"].iat[0]
-
-            except:
-                    return False
+                    try:
+                        return df.loc[df["quarter_frame"] == search, "quarter_val"].iat[0]
+                    except:
+                        return False
 
 
     def tree_item(self, node, year, values, attributes, category, quarter = None):
@@ -2005,9 +2006,11 @@ Cash and Cash Equivalents - Cashflow
 # Level 0
 cce = Node("CashAndCashEquivalentsPeriodIncreaseDecrease", attribute="debit")
 
+
 # End-cash position
 cce1 = Node("CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents", attribute="debit")
 cce2 = Node("CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalentsIncludingDisposalGroupAndDiscontinuedOperations", attribute="debit", parent=cce1)
+cce3 = Node("CashAndCashEquivalentsAtCarryingValue", attribute="debit", parent=cce2)
 
 # Level 1
 
