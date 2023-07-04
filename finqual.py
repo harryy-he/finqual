@@ -278,7 +278,7 @@ class Ticker():
                 df["difference_days"] = (df["end"] - df["start"]).dt.days
                 df["flag"] = df["difference_days"].between(76, 104)
 
-                df["year"] = df['end'].dt.year
+                df["year"] = df['start'].dt.year
                 q = self.fiscal
                 df["quarter"] = df.apply(lambda x: self.date_quarter(x["end"], q[0], q[1], q[2], q[3]), axis=1)
                 df["quarter_frame"] = df["year"].astype(str) + "Q" + df["quarter"].astype(str)
