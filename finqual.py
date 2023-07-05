@@ -578,59 +578,31 @@ class Ticker():
         sic = pd.read_csv('sec_sic.csv', index_col=0)
         sic = sic.dropna()
         sic["SIC"] = sic["SIC"].astype(int)
+        sic["SIC"] = sic["SIC"].astype(str)
+        sic['SIC'] = sic['SIC'].apply(lambda x: x[:level])
+        sic["SIC"] = sic["SIC"].astype(int)
 
         sic_code = sic[sic["ticker"] == self.ticker]["SIC"].values[0]
-        company_list = sic[sic["SIC"] == sic_code]
+        company_list = sic[sic["SIC"] == sic_code].copy()
+        company_list.drop(["cik_str"], axis=1, inplace=True)
+        company_list.reset_index(drop=True, inplace=True)
 
-        market_cap = []
-        for i in company_list["ticker"]:
-            try:
-                market_cap.append(Ticker(i).SEC1()["facts"]["dei"]["EntityPublicFloat"]["units"]["USD"][-1]["val"])
-            except:
-                market_cap.append(0)
+        sic_index = company_list[company_list['ticker'] == self.ticker].index[0]  # Getting index of desired row
 
-        company_list["market cap"] = market_cap
+        n_above = n // 2
+        n_below = n - n_above
 
-        company_list = company_list.sort_values(by='market cap', ascending=False)
-        company_list = company_list.head()
+        start_row = max(0, sic_index - n_above)  # Getting the index
+        end_row = min(sic_index + n_below, len(company_list) - 1)
 
-        current_year = datetime.datetime.now().year
-        previous_year = datetime.datetime.now().year - 2
+        surronding_companies = company_list.iloc[start_row:end_row + 1]
 
-        enterprise_value = []
-        ebitda_list = []
+        if len(surronding_companies) < (n + 1):
+            n_below = n - len(surronding_companies) + 1
+            end_row = min(end_row + n_below, len(company_list) - 1)
+            surronding_companies = company_list.iloc[start_row:end_row + 1]
 
-        for i in company_list["ticker"]:
-            short_debt = Ticker(i).year_tree_item(cl, previous_year, current_year, category="balance", quarter=True)
-            short_debt = [i for i in short_debt if i != 0][0]
-
-            if short_debt == []:
-                short_debt = 0
-
-            long_debt = Ticker(i).year_tree_item(ncl1_1, previous_year, current_year, category="balance", quarter=True)
-            long_debt = [i for i in long_debt if i != 0][0]
-
-            if long_debt == []:
-                long_debt = 0
-
-            cash = Ticker(i).year_tree_item(ca2_1, previous_year, current_year, category="balance", quarter=True)
-            cash = [i for i in cash if i != 0][0]
-
-            if cash == []:
-                cash = 0
-
-            enterprise = short_debt + long_debt - cash
-            enterprise_value.append(enterprise)
-
-            ebitda = Ticker(i).income(previous_year, current_year, quarter=True).loc["EBITDA"].tolist()
-            ebitda = [i for i in ebitda if i != 0][0]
-            ebitda_list.append(ebitda)
-
-        company_list["enterprise value"] = enterprise_value
-        company_list["enterprise value"] = company_list["enterprise value"] + company_list["market cap"]
-        company_list["ebitda"] = ebitda_list
-
-        company_list["ev/ebitda"] = company_list["enterprise value"] / company_list["ebitda"]
+        surronding_companies = surronding_companies.rename(columns={'ticker': 'Ticker', 'title': 'Name'})
 
         return company_list
 
