@@ -66,7 +66,7 @@ class Ticker():
         self.ticker = ticker
         self.cik = self.CIK()
         self.data = self.SEC()
-        self.fiscal = self.fiscal_year()
+        #self.fiscal = self.fiscal_year()
 
     def CIK(self):
         headers = {"Accept": "application/json, text/plain, */*", "Accept-Encoding": "gzip, deflate, br",
