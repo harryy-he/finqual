@@ -515,7 +515,8 @@ class Ticker():
                  nca1_13, nca1_19, nca1_36, nca,
                  cl2_1, cl2_2, cl1_2, cl1_3, cl1_27, cl,
                  ncl1_1, ncl1_2, ncl,
-                 se2_3, se2_8, se2_12, se2_14, se1_1, se1_2,
+                 se2_3, se2_8, se2_12, se2_14,
+                 se1_1, se1_2,
                  a, l, se]
 
         node_names = ["Cash and Cash Equivalents", "Short-term Investments", "Accounts Receivable, Net", "Inventories",
