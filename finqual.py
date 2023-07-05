@@ -247,55 +247,52 @@ class Ticker():
                 return False
 
             if (df.shape[1] == 8):
-                print(node.name)
-                df.drop_duplicates(subset=["end", "val"], inplace=True, keep="last")
-                df['end'] = pd.to_datetime(df["end"], format='%Y-%m-%d')
+                try:
+                    df.drop_duplicates(subset=["end", "val"], inplace=True, keep="last")
+                    df['end'] = pd.to_datetime(df["end"], format='%Y-%m-%d')
 
-                df["year"] = df['end'].dt.year
-                q = self.fiscal
-                df["quarter"] = df.apply(lambda x: self.date_quarter(x["end"], q[0], q[1], q[2], q[3]), axis=1)
-                df["quarter_frame"] = df["year"].astype(str) + "Q" + df["quarter"].astype(str)
+                    df["year"] = df['end'].dt.year
+                    df["quarter"] = df["end"].dt.quarter
+                    df["quarter_frame"] = df["year"].astype(str) + "Q" + df["quarter"].astype(str)
 
-                display(df.tail())
-                if (quarter == None):
-                    search = str(year) + "Q" + str(4)
-                    try:
-                        return df.loc[df["quarter_frame"] == search, "val"].iat[0]
-                    except:
-                        return False
-                else:
-                    search = str(year) + "Q" + str(quarter)
-                    try:
-                        return df.loc[df["quarter_frame"] == search, "val"].iat[0]
-                    except:
-                        return False
+                    if (quarter == None):
+                        search = str(year) + "Q" + str(4)
+                        try:
+                            return df.loc[df["quarter_frame"] == search, "val"].iat[0]
+                        except:
+                            return False
+                    else:
+                        search = str(year) + "Q" + str(quarter)
+                        try:
+                            return df.loc[df["quarter_frame"] == search, "val"].iat[0]
+                        except:
+                            return False
+                except:
+                    pass
 
             else:
-                # print(node.name)
                 df['end'] = pd.to_datetime(df["end"], format='%Y-%m-%d')
                 df['start'] = pd.to_datetime(df["start"], format='%Y-%m-%d')
                 df.drop_duplicates(subset=['start', "end"], inplace=True, keep="last")
+
                 df["difference_days"] = (df["end"] - df["start"]).dt.days
                 df["flag"] = df["difference_days"].between(76, 104)
 
-                df["year"] = df['start'].dt.year
-                q = self.fiscal
-                df["quarter"] = df.apply(lambda x: self.date_quarter(x["end"], q[0], q[1], q[2], q[3]), axis=1)
+                df["year"] = df['end'].dt.year
+                df["quarter"] = df['end'].dt.quarter
                 df["quarter_frame"] = df["year"].astype(str) + "Q" + df["quarter"].astype(str)
 
                 df['frame'] = np.where(df['difference_days'].between(350, 380), df['year'].astype(str), np.nan)
-                df.sort_values(['year', 'quarter', 'flag'], inplace=True)
+                df.sort_values(['year', 'quarter', "end", "difference_days"], inplace=True)
                 df.drop_duplicates(subset=['year', "quarter"], inplace=True, keep="last")
 
                 """
-                Calculating the quarter_vals
+                #Calculating the quarter_vals
                 """
-                df.loc[~df['flag'], 'quarter_val'] = df.groupby('year')['val'].diff(periods=1)
+                df.loc[~df['flag'], 'quarter_val'] = df.groupby('start')['val'].diff(periods=1)
                 df.loc[df['quarter_val'].isnull(), 'quarter_val'] = df['val']
                 df["quarter_val"] = df["quarter_val"].astype(np.int64)
                 df.reset_index(drop=True, inplace=True)
-
-                # display(df.tail())
 
                 if (quarter == None):
                     search = str(year)
@@ -309,7 +306,6 @@ class Ticker():
                         return df.loc[df["quarter_frame"] == search, "quarter_val"].iat[0]
                     except:
                         return False
-
 
     def tree_item(self, node, year, values, attributes, category, quarter = None):
         """
