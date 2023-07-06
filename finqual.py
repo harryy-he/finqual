@@ -577,6 +577,7 @@ class Ticker():
     def comparables(self):
         sic = pd.read_csv('sec_sic.csv', index_col=0)
         sic = sic.dropna()
+
         sic["SIC"] = sic["SIC"].astype(int)
         sic["SIC"] = sic["SIC"].astype(str)
         sic['SIC'] = sic['SIC'].apply(lambda x: x[:level])
@@ -602,9 +603,14 @@ class Ticker():
             end_row = min(end_row + n_below, len(company_list) - 1)
             surronding_companies = company_list.iloc[start_row:end_row + 1]
 
+        if len(surronding_companies) < (n + 1):
+            n_above = n - len(surronding_companies) + 1
+            start_row = max(0, start_row - n_above)
+            surronding_companies = company_list.iloc[start_row:end_row + 1]
+
         surronding_companies = surronding_companies.rename(columns={'ticker': 'Ticker', 'title': 'Name'})
 
-        return company_list
+        return surronding_companies
 
 
 """
