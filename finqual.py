@@ -170,7 +170,7 @@ class Ticker():
         data = source.json()
         data = pd.DataFrame(data)
 
-        return data["facts"]["us-gaap"]
+        return data["facts"]
 
     def lookup(self, node, year, category, quarter = None):
         """
@@ -186,7 +186,7 @@ class Ticker():
             """
 
             try:
-                df = pd.DataFrame(data[item]["units"]["USD"])
+                df = pd.DataFrame(data["us-gaap"][item]["units"]["USD"])
                 df.dropna(inplace = True)
                 df["frame"] = df["frame"].str.replace('I', '')
 
@@ -224,7 +224,7 @@ class Ticker():
             """
             try:
 
-                df = pd.DataFrame(data[item]["units"]["USD"])
+                df = pd.DataFrame(data["us-gaap"][item]["units"]["USD"])
                 df.dropna(inplace = True)
                 df["frame"] = df["frame"].str.replace('I', '')
                 fy = df[df["fp"] == "FY"].iloc[-1][7][-2:]
@@ -242,7 +242,7 @@ class Ticker():
 
         if (category == "cashflow"):
             try:
-                df = pd.DataFrame(data[item]["units"]["USD"])
+                df = pd.DataFrame(data["us-gaap"][item]["units"]["USD"])
             except:
                 return False
 
