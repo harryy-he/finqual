@@ -574,6 +574,22 @@ class Ticker():
             df = df.loc[:, (df != 0).any(axis=0)]
             return df
 
+    def ratios(self, start, end):
+
+        df = self.data
+
+        balance_r = self.balance(start, end)
+        income_r = self.income(start, end)
+        cash_r = self.cashflow(start, end)
+
+        market_cap = (df["dei"]["EntityPublicFloat"]["units"]["USD"][-1]["val"])
+        display(pd.DataFrame(df["dei"]["EntityPublicFloat"]["units"]["USD"]))
+
+        year_list = [i for i in np.arange(end, start - 1, -1)]
+        ebitda = income_r.loc["EBITDA"]
+
+        return ebitda
+
     def comparables(self):
         sic = pd.read_csv('sec_sic.csv', index_col=0)
         sic = sic.dropna()
@@ -612,6 +628,74 @@ class Ticker():
 
         return surronding_companies
 
+    def ratios(self, start, end):
+
+        df = self.data
+
+        balance_r = self.balance(start - 1, end)
+        income_r = self.income(start, end)
+        cash_r = self.cashflow(start, end)
+
+        year_list = [i for i in np.arange(end, start - 1, -1)]
+
+        cap_df = pd.DataFrame(df["dei"]["EntityPublicFloat"]["units"]["USD"])
+        cap_df["fy"] = cap_df["frame"].str[2:6]
+
+        cap = []
+        for i in year_list:
+            try:
+                cap.append(cap_df.loc[cap_df['fy'] == str(i), 'val'].iloc[0])
+            except:
+                cap.append(None)
+
+        cap = pd.Series(cap, index=year_list)
+
+        ebitda = income_r.loc["EBITDA"]
+        ebit = income_r.loc["EBIT"]
+        net_profit = income_r.loc["Net Profit"]
+        operating_profit = income_r.loc["Operating Profit"]
+        tax = income_r.loc["Tax"]
+
+        current_assets = balance_r.loc["Total Current Assets"]
+        total_assets = balance_r.loc["Total Assets"]
+        current_liabilities = balance_r.loc["Total Current Liabilities"]
+        total_liabilities = balance_r.loc["Total Liabilities"]
+        total_se = balance_r.loc["Stockholder's Equity"]
+        total_equity = balance_r.loc["Total Equity"]
+        inventory = balance_r.loc["Inventories"]
+        cash = balance_r.loc["Cash and Cash Equivalents"]
+
+        fcf = cash_r.loc["Free Cash Flow"]
+
+        nwc = (current_assets - current_liabilities).diff(-1)
+
+        d_a = pd.Series(self.year_tree_item(cce5_2, start, end, "income"), index=year_list)
+        capex = pd.Series(self.year_tree_item(cce4_8, start, end, "cashflow"), index=year_list)
+        ufcf = operating_profit + tax - capex + d_a - nwc
+
+        cap = cap + total_liabilities - cash
+
+        ratio_df = pd.DataFrame(columns=year_list)
+
+        ratio_df.loc["Current Ratio"] = (current_assets / current_liabilities)
+        ratio_df.loc["Quick Ratio"] = ((current_assets - inventory) / current_liabilities)
+
+        ratio_df.loc["Debt-to-Equity Ratio"] = (total_liabilities / total_se)
+
+        ratio_df.loc["Return on Equity"] = (net_profit / total_se)
+        ratio_df.loc["Return on Assets"] = (net_profit / total_assets)
+        ratio_df.loc["Return on Capital Employed"] = ebit / (total_assets - current_liabilities)
+        ratio_df.loc["Return on Invested Capital"] = (operating_profit + tax) / (total_liabilities + total_equity)
+
+        ratio_df.loc["FCFF Yield"] = ufcf / (cap)
+
+        ratio_df.loc["EV/EBITDA"] = (cap / ebitda)
+
+        ratio_df.dropna(axis=1, how='all', inplace=True)
+
+        ratio_df["Mean"] = ratio_df.mean(axis=1)
+
+        return ratio_df
 
 """
 Net Income
