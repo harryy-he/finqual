@@ -574,22 +574,6 @@ class Ticker():
             df = df.loc[:, (df != 0).any(axis=0)]
             return df
 
-    def ratios(self, start, end):
-
-        df = self.data
-
-        balance_r = self.balance(start, end)
-        income_r = self.income(start, end)
-        cash_r = self.cashflow(start, end)
-
-        market_cap = (df["dei"]["EntityPublicFloat"]["units"]["USD"][-1]["val"])
-        display(pd.DataFrame(df["dei"]["EntityPublicFloat"]["units"]["USD"]))
-
-        year_list = [i for i in np.arange(end, start - 1, -1)]
-        ebitda = income_r.loc["EBITDA"]
-
-        return ebitda
-
     def comparables(self):
         sic = pd.read_csv('sec_sic.csv', index_col=0)
         sic = sic.dropna()
