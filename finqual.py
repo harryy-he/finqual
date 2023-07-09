@@ -190,30 +190,14 @@ class Ticker():
                 df.dropna(inplace = True)
                 df["frame"] = df["frame"].str.replace('I', '')
 
-                try:
-                    fy = df[df["fp"] == "FY"].iloc[-1][7][-2:]
-                except:
-                    fy = None
-
                 if (quarter != None):
                     # If looking at quarter then:
                     search = "CY" + str(year) + "Q" + str(quarter)
-                    return df.loc[df["frame"] == search, "val"].iat[0]
-
                 else:
-                    try:
-                        search = "CY" + str(year)
-                        return df.loc[df["frame"] == search, "val"].iat[0]
+                    search = "CY" + str(year)
 
-                    except:
-                        pass
+                return df["val"].to_numpy()[df["frame"].to_numpy() == search][0]
 
-                    try:
-                        search = "CY" + str(year) + fy
-                        return df.loc[df["frame"] == search, "val"].iat[0]
-
-                    except:
-                        return False
             except:
                 return False
 
@@ -234,7 +218,7 @@ class Ticker():
                 else:
                     search = "CY" + str(year) + "Q" + str(quarter)
 
-                return df.loc[df["frame"] == search, "val"].iat[0]
+                return df["val"].to_numpy()[df["frame"].to_numpy() == search][0]
 
             except:
 
@@ -258,13 +242,13 @@ class Ticker():
                     if (quarter == None):
                         search = str(year) + "Q" + str(4)
                         try:
-                            return df.loc[df["quarter_frame"] == search, "val"].iat[0]
+                            return df["val"].to_numpy()[df["quarter_frame"].to_numpy() == search][0]
                         except:
                             return False
                     else:
                         search = str(year) + "Q" + str(quarter)
                         try:
-                            return df.loc[df["quarter_frame"] == search, "val"].iat[0]
+                            return df["val"].to_numpy()[df["quarter_frame"].to_numpy() == search][0]
                         except:
                             return False
                 except:
@@ -297,13 +281,13 @@ class Ticker():
                 if (quarter == None):
                     search = str(year)
                     try:
-                        return df.loc[df["frame"] == search, "val"].iat[0]
+                        return df["val"].to_numpy()[df["frame"].to_numpy() == search][0]
                     except:
                         return False
                 else:
                     search = str(year) + "Q" + str(quarter)
                     try:
-                        return df.loc[df["quarter_frame"] == search, "quarter_val"].iat[0]
+                        return df["quarter_val"].to_numpy()[df["quarter_frame"].to_numpy() == search][0]
                     except:
                         return False
 
@@ -380,8 +364,6 @@ class Ticker():
             data = [self.year_tree_item(i, start - 1, end, category, quarter) for i in nodes]
             df = pd.DataFrame(data, index = [node_names], columns = [quarter_list])
 
-            df.columns = df.columns.get_level_values(0)
-            df.index = df.index.get_level_values(0)
             """
             Get the missing quarter stuff, some zeros will be replaced at sense-checking stage, the zeros will signify the quarter that the company reports in
             """
@@ -417,8 +399,8 @@ class Ticker():
             data = [self.year_tree_item(i, start - 1, end, category = "income") for i in nodes]
             df = pd.DataFrame(data, index=[node_names], columns=[year_list])
 
-            df.columns = df.columns.get_level_values(0)
-            df.index = df.index.get_level_values(0)
+        df.columns = df.columns.get_level_values(0)
+        df.index = df.index.get_level_values(0)
 
         """
         Sense-checking
@@ -479,16 +461,12 @@ class Ticker():
             data = [self.year_tree_item(i, start, end, quarter = True, category = "cashflow") for i in nodes]
             df = pd.DataFrame(data, index = [node_names], columns = [quarter_list])
 
-            df.columns = df.columns.get_level_values(0)
-            df.index = df.index.get_level_values(0)
-
         else:
-
             data = [self.year_tree_item(i, start, end, category = "cashflow") for i in nodes]
             df = pd.DataFrame(data, index = [node_names], columns = [year_list])
 
-            df.columns = df.columns.get_level_values(0)
-            df.index = df.index.get_level_values(0)
+        df.columns = df.columns.get_level_values(0)
+        df.index = df.index.get_level_values(0)
 
         df.loc["Free Cash Flow"] = df.loc["Operating Cash Flow"] - df.loc["Capital Expenditures"]
         df.drop(["Capital Expenditures"], inplace=True)
@@ -537,17 +515,12 @@ class Ticker():
             data = [self.year_tree_item(i, start, end, category = "balance", quarter=True) for i in nodes]  # Fetching the data
             df = pd.DataFrame(data, index=[node_names], columns=[quarter_list])  # Creating the dataframe with columns and index according to the list
 
-            df.columns = df.columns.get_level_values(0)  # Resetting to flat index
-            df.index = df.index.get_level_values(0)  # Resetting to flat index
-
         else:
-
             data = [self.year_tree_item(i, start, end, category = "balance") for i in nodes]
-
             df = pd.DataFrame(data, index=[node_names], columns=[year_list])
 
-            df.columns = df.columns.get_level_values(0)
-            df.index = df.index.get_level_values(0)
+        df.columns = df.columns.get_level_values(0)
+        df.index = df.index.get_level_values(0)
 
         """
         Sense-checking
@@ -574,7 +547,7 @@ class Ticker():
             df = df.loc[:, (df != 0).any(axis=0)]
             return df
 
-    def comparables(self):
+    def comparables(self, n, level):
         sic = pd.read_csv('sec_sic.csv', index_col=0)
         sic = sic.dropna()
 
