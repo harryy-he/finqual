@@ -567,7 +567,7 @@ class Ticker():
             df = df.loc[:, (df != 0).any(axis=0)]
             return df
 
-    def comparables(self, n, level):
+    def comparables(self, n, level = None):
         this_dir, this_filename = os.path.split(__file__)
         sic_path = os.path.join(this_dir, "data", "sec_sic.csv")
 
