@@ -184,10 +184,25 @@ class Ticker():
             """
             Creating search term
             """
-
             try:
                 df = pd.DataFrame(data["us-gaap"][item]["units"]["USD"])
                 df.dropna(inplace = True)
+                df["frame"] = df["frame"].str.replace('I', '')
+
+                if (quarter != None):
+                    # If looking at quarter then:
+                    search = "CY" + str(year) + "Q" + str(quarter)
+                else:
+                    search = "CY" + str(year)
+
+                return df["val"].to_numpy()[df["frame"].to_numpy() == search][0]
+
+            except:
+                pass
+
+            try:
+                df = pd.DataFrame(data["us-gaap"][item]["units"]["USD/shares"])
+                df.dropna(inplace=True)
                 df["frame"] = df["frame"].str.replace('I', '')
 
                 if (quarter != None):
@@ -338,6 +353,8 @@ class Ticker():
         df = self.income_helper(start, end, category, quarter, readable)
         df = df.drop(["Cost and Expenses", "Interest Expense", "Depreciation and Amortization"])
 
+        df = df.round(1).applymap('{:.1f}'.format).replace('\.0$', '', regex=True)
+
         return df
 
     def income_helper(self, start, end, category, quarter = None, readable = None):
@@ -351,12 +368,15 @@ class Ticker():
         """
         nodes = [rev, cor, gp, opex, ce,
                  oi,
-                 noi, pti, tax, ni, cce5_2,
-                 ide1_1]
+                 noi, pti, tax, ni,
+                 cce5_2,
+                 ide1_1,
+                 eps, eps_d]
         node_names = ["Revenues", "Cost of Revenue", "Gross Profit", "Operating Expenses", "Cost and Expenses",
                       "Operating Profit"
                      ,"Non-Operating Income/Expense", "Pretax Profit", "Tax", "Net Profit", "Depreciation and Amortization"
-                     ,"Interest Expense"]
+                     ,"Interest Expense"
+                     , "EPS", "Diluted EPS"]
         """
         Appending each node values for each year to a data
         """
@@ -657,6 +677,10 @@ class Ticker():
 """
 Net Income
 """
+
+eps = Node("EarningsPerShareBasic", attribute = "credit")
+eps_d = Node("EarningsPerShareDiluted", attribute = "credit")
+
 ni = Node("NetIncomeLoss", attribute="credit")
 
 # Level 1
