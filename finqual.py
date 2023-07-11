@@ -568,7 +568,13 @@ class Ticker():
             return df
 
     def comparables(self, n, level):
-        sic = pd.read_csv('sec_sic.csv', index_col=0)
+        this_dir, this_filename = os.path.split(__file__)
+        sic_path = os.path.join(this_dir, "data", "sec_sic.csv")
+
+        if level == None:
+            level = 4
+
+        sic = pd.read_csv(sic_path, index_col=0)
         sic = sic.dropna()
 
         sic["SIC"] = sic["SIC"].astype(int)
