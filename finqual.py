@@ -534,7 +534,7 @@ class Ticker():
                           "Trading Securities", "Available-For-Sale Securities","Held-To-Maturity Securities", "Derivative Securities", "Securities Borrowed", "Financial Instruments Owned",
                           "Property, Plant and Equipment", "Intangibles", "Accounts Receivables", "Other Assets", "Total Assets",
                           "Securities Sold Under Agreements to Repurchase","Deposits", "Short Sales Obligations",
-                          "Short-Term Debt", "Long-Term Debt", 
+                          "Short-Term Debt", "Long-Term Debt",
                           "Accrued Expenses and Accounts Payable", "Other Liabilities", "Total Liabilities",
                           "Common Stock", "Additional Paid In Capital", "Retained Earnings", "Accumulated Other Income",
                           "Stockholder's Equity", "Minority Interest", "Total Equity"]
@@ -591,8 +591,8 @@ class Ticker():
 
         else:
 
-            df.loc["Other Assets"] = df.loc["Total Assets"] - df.iloc[0:11].sum()
-            df.loc["Other Liabilities"] = df.loc["Total Liabilities"] - df.iloc[14:19].sum()
+            df.loc["Other Assets"] = df.loc["Total Assets"] - df.iloc[0:12].sum()
+            df.loc["Other Liabilities"] = df.loc["Total Liabilities"] - df.iloc[14:20].sum()
 
         if readable == True:
 
