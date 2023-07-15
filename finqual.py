@@ -67,7 +67,6 @@ class Ticker():
         self.ticker = ticker
         self.cik = self.CIK()
         self.data = self.SEC()
-        #self.fiscal = self.fiscal_year()
 
     def CIK(self):
         headers = {"Accept": "application/json, text/plain, */*", "Accept-Encoding": "gzip, deflate, br",
@@ -364,6 +363,8 @@ class Ticker():
         """
         year_list = [i for i in np.arange(end, start - 2, -1)]
         quarter_list = [str(i) + "Q" + str(j) for i in year_list for j in np.arange(4, 0, -1)]
+
+        bank_sic = []
         """
         Creating list of income statement items and their names
         """
@@ -507,27 +508,57 @@ class Ticker():
         quarter_list = [str(i) + "Q" + str(j) for i in year_list for j in np.arange(4, 0, -1)]
 
         """
-        Creating list of income statement items and their names
+        Getting SIC code
         """
+        this_dir, this_filename = os.path.split(__file__)
+        sic_path = os.path.join(this_dir, "data", "sec_sic.csv")
 
-        nodes = [ca2_1, ca2_2, ca1_4, ca2_12, ca1_34, ca,
-                 nca1_13, nca1_19, nca1_36, nca,
-                 cl2_1, cl2_2, cl1_2, cl1_3, cl1_27, cl,
-                 ncl1_1, ncl1_2, ncl,
-                 se2_3, se2_8, se2_12, se2_14,
-                 se1_1, se1_2,
-                 a, l, se]
+        sic = pd.read_csv(sic_path, index_col=0)
+        sic = sic.dropna()
 
-        node_names = ["Cash and Cash Equivalents", "Short-term Investments", "Accounts Receivable, Net", "Inventories",
-                      "Other Current Assets", "Total Current Assets",
-                      "Property Plant and Equipment", "Intangibles", "Other Non-Current Assets",
-                      "Total Non-Current Assets",
-                      "Accounts Payable", "Accrued Liabilities", "Deferred Revenue", "Short-term Borrowings",
-                      "Other Current Liabilities", "Total Current Liabilities",
-                      "Long-Term Debt", "Non-Debt Long Term Liabilities", "Total Non-Current Liabilities",
-                      "Capital Stock", "Additional Paid In Capital", "Retained Earnings", "Accumulated Other Change",
-                      "Stockholder's Equity", "Minority Interest",
-                      "Total Assets", "Total Liabilities", "Total Equity"]
+        sic_code = sic[sic["ticker"] == self.ticker]["SIC"].values[0]
+
+        bank_codes = [6022, 6021, 6211, 6029, 6035, 6199]
+
+        if sic_code in bank_codes:
+            nodes = [ca2_1, ba1_1, ba1_4,
+                     ba1_6, ba1_7, ba1_9, ba1_15, ba1_3, ba1_18,
+                     ba1_10, nca1_19, ba1_16, ba1_11, a,
+                     bl1_1, bl1_3, bl1_9,
+                     cl2_9, bl1_6,
+                     bl1_8, bl1_10, l,
+                     se2_3, se2_8, se2_12, se2_11,
+                     se1_1, se1_2, se]
+
+            node_names = ["Cash and Cash Equivalents", "Securities Purchased Under Agreements to Resell", "Net Loans",
+                          "Trading Securities", "Available-For-Sale Securities","Held-To-Maturity Securities", "Derivative Securities", "Securities Borrowed", "Financial Instruments Owned",
+                          "Property, Plant and Equipment", "Intangibles", "Accounts Receivables", "Other Assets", "Total Assets",
+                          "Securities Sold Under Agreements to Repurchase","Deposits", "Short Sales Obligations",
+                          "Short-Term Debt", "Long-Term Debt", 
+                          "Accrued Expenses and Accounts Payable", "Other Liabilities", "Total Liabilities",
+                          "Common Stock", "Additional Paid In Capital", "Retained Earnings", "Accumulated Other Income",
+                          "Stockholder's Equity", "Minority Interest", "Total Equity"]
+
+
+        else:
+            nodes = [ca2_1, ca2_2, ca1_4, ca2_12, ca1_34, ca,
+                     nca1_13, nca1_19, nca1_36, nca,
+                     cl2_1, cl2_2, cl1_2, cl1_3, cl1_27, cl,
+                     ncl1_1, ncl1_2, ncl,
+                     se2_3, se2_8, se2_12, se2_14,
+                     se1_1, se1_2,
+                     a, l, se]
+
+            node_names = ["Cash and Cash Equivalents", "Short-term Investments", "Accounts Receivable, Net", "Inventories",
+                          "Other Current Assets", "Total Current Assets",
+                          "Property Plant and Equipment", "Intangibles", "Other Non-Current Assets",
+                          "Total Non-Current Assets",
+                          "Accounts Payable", "Accrued Liabilities", "Deferred Revenue", "Short-term Borrowings",
+                          "Other Current Liabilities", "Total Current Liabilities",
+                          "Long-Term Debt", "Non-Debt Long Term Liabilities", "Total Non-Current Liabilities",
+                          "Capital Stock", "Additional Paid In Capital", "Retained Earnings", "Accumulated Other Change",
+                          "Stockholder's Equity", "Minority Interest",
+                          "Total Assets", "Total Liabilities", "Total Equity"]
 
         """
         Appending each node values for each year to a data
@@ -546,16 +577,22 @@ class Ticker():
         """
         Sense-checking
         """
-        df.loc["Total Non-Current Assets"] = df.loc["Total Assets"] - df.loc["Total Current Assets"]
-        df.loc["Other Current Assets"] = df.loc["Total Current Assets"] - df.iloc[0:4].sum()
-        df.loc["Other Non-Current Assets"] = df.loc["Total Non-Current Assets"] - df.iloc[6:7].sum()
+        if sic_code not in bank_codes:
+            df.loc["Total Non-Current Assets"] = df.loc["Total Assets"] - df.loc["Total Current Assets"]
+            df.loc["Other Current Assets"] = df.loc["Total Current Assets"] - df.iloc[0:4].sum()
+            df.loc["Other Non-Current Assets"] = df.loc["Total Non-Current Assets"] - df.iloc[6:7].sum()
 
-        df.loc["Other Current Liabilities"] = df.loc["Total Current Liabilities"] - df.iloc[11:15].sum()
-        df.loc["Total Non-Current Liabilities"] = df.loc["Total Liabilities"] - df.loc["Total Current Liabilities"]
-        df.loc["Non-Debt Long Term Liabilities"] = df.loc["Total Non-Current Liabilities"] - df.loc["Long-Term Debt"]
+            df.loc["Other Current Liabilities"] = df.loc["Total Current Liabilities"] - df.iloc[11:15].sum()
+            df.loc["Total Non-Current Liabilities"] = df.loc["Total Liabilities"] - df.loc["Total Current Liabilities"]
+            df.loc["Non-Debt Long Term Liabilities"] = df.loc["Total Non-Current Liabilities"] - df.loc["Long-Term Debt"]
 
-        df.loc["Accumulated Other Change"] = df.loc["Stockholder's Equity"] - df.iloc[19:22].sum()
-        df.loc["Minority Interest"] = df.loc["Total Equity"] - df.loc["Stockholder's Equity"]
+            df.loc["Accumulated Other Change"] = df.loc["Stockholder's Equity"] - df.iloc[19:22].sum()
+            df.loc["Minority Interest"] = df.loc["Total Equity"] - df.loc["Stockholder's Equity"]
+
+        else:
+
+            df.loc["Other Assets"] = df.loc["Total Assets"] - df.iloc[0:11].sum()
+            df.loc["Other Liabilities"] = df.loc["Total Liabilities"] - df.iloc[14:19].sum()
 
         if readable == True:
 
@@ -682,11 +719,140 @@ class Ticker():
         return ratio_df
 
 """
-Net Income
+Banks and financial services balance sheet items
+"""
+
+#ca3_1 # Cash due from banks
+#ca3_2 # Deposits from other banks
+
+"""
+Banks - Assets
+"""
+
+#Level 1
+ba1_1 = Node("FederalFundsSoldAndSecuritiesPurchasedUnderAgreementsToResell", attribute = "debit") #Securities Purchased Under Agreements to Resell
+ba1_12 = Node("CarryingValueOfFederalFundsSoldSecuritiesPurchasedUnderAgreementsToResellAndDepositsPaidForSecuritiesBorrowed", attribute = "debit", parent = ba1_1)
+ba1_13 = Node("CarryingValueOfSecuritiesPurchasedUnderAgreementsToResellAndDepositsPaidForSecuritiesBorrowed", attribute = "debit", parent = ba1_12)
+
+
+
+ba1_4 = Node("NotesReceivableNet", attribute = "debit") #Loans and Leases, Net
+ba1_5 = Node("FinancingReceivableExcludingAccruedInterestAfterAllowanceForCreditLoss", attribute = "debit", parent = ba1_4) #Loans and Leases
+
+ba1_3 = Node("SecuritiesBorrowed", attribute = "debit") # Securities Borrowed
+
+ba1_14 = Node("MarketableSecurities", attribute = "debit") #Marketable Securities
+
+ba1_6 = Node("TradingSecurities", attribute = "debit", parent = ba1_14) #Trading Securities
+
+ba1_15 = Node("DerivativeAssets", attribute = "debit", parent = ba1_14) #Derivative Assets
+
+ba1_7 = Node("AvailableForSaleSecuritiesDebtSecurities", attribute = "debit", parent = ba1_14) #Available-For-Sale Securities
+ba1_8 = Node("DebtSecuritiesAvailableForSaleExcludingAccruedInterest", attribute = "debit", parent = ba1_7) #Available-For-Sale Securities
+
+ba1_9 = Node("DebtSecuritiesHeldToMaturityExcludingAccruedInterestAfterAllowanceForCreditLoss", attribute = "debit", parent = ba1_14) #Held-To-Maturity Securities
+ba1_17 = Node("DebtSecuritiesHeldToMaturityAmortizedCostAfterAllowanceForCreditLoss", attribute = "debit", parent = ba1_9)
+
+ba1_10 = Node("PropertyPlantAndEquipmentAndFinanceLeaseRightOfUseAssetAfterAccumulatedDepreciationAndAmortization", attribute = "debit") #Premises and Equipment
+
+ba1_11 = Node("OtherAssets", attribute = "debit")
+
+ba1_16 = Node("AccountsReceivableNet", attribute = "debit") # Accounts Receivables
+
+ba1_18 = Node("FinancialInstrumentsOwnedAtFairValue", attribute = "debit") #Financial Instruments Owned
+
+#Level 2
+ba2_1 = Node("FederalFundsSold", attribute = "debit", parent = ba1_13)
+ba2_2 = Node("SecuritiesPurchasedUnderAgreementsToResell", attribute = "debit", parent = ba1_13)
+
+ba2_3 = Node("FinancingReceivableAllowanceForCreditLossExcludingAccruedInterest", attribute = "credit", parent = ba1_5)
+ba2_4 = Node("FinancingReceivableAllowanceForCreditLosses", attribute = "credit", parent = ba2_3)
+
+ba2_5 = Node("FinancingReceivableExcludingAccruedInterestBeforeAllowanceForCreditLoss", attribute = "debit", parent = ba1_5)
+ba2_6 = Node("NotesReceivableGross", attribute = "debit", parent = ba2_5) # Gross loans
+
+ba2_7 = Node("TradingSecuritiesDebt", attribute = "debit", parent = ba1_6)
+ba2_8 = Node("EquitySecuritiesFvNiCurrentAndNoncurrent", attribute = "debit", parent = ba1_6)
+
+ba2_9 = Node("DebtSecuritiesHeldToMaturityAllowanceForCreditLossExcludingAccruedInterest", attribute = "credit", parent = ba1_17)
+ba2_22 = Node("DebtSecuritiesHeldToMaturityAllowanceForCreditLoss", attribute = "credit", parent = ba2_9)
+ba2_10 = Node("DebtSecuritiesHeldToMaturityExcludingAccruedInterestBeforeAllowanceForCreditLoss", attribute = "debit", parent = ba1_17)
+ba2_21 = Node("HeldToMaturitySecurities", attribute = "debit", parent = ba2_10)
+
+ba2_11 = Node("FinanceLeaseRightOfUseAsset", attribute = "credit", parent = ba1_10)
+ba2_12 = Node("PropertyPlantAndEquipmentNet", attribute = "debit", parent = ba1_10)
+
+ba2_13 = Node("ReceivablesFromCustomers", attribute = "debit", parent = ba1_16)
+ba2_20 = Node("ContractWithCustomerReceivableAfterAllowanceForCreditLossCurrent", attribute = "debit", parent = ba2_13)
+ba2_14 = Node("ReceivablesFromBrokersDealersAndClearingOrganizations", attribute = "debit", parent = ba1_16)
+ba2_15 = Node("AccountsReceivableFromSecuritization", attribute = "debit", parent = ba1_16)
+ba2_16 = Node("AccountsReceivableBilledForLongTermContractsOrPrograms", attribute = "debit", parent = ba1_16)
+ba2_17 = Node("NotesReceivableGross", attribute = "debit", parent = ba1_16)
+ba2_18 = Node("AccruedInvestmentIncomeReceivable", attribute = "debit", parent = ba1_16)
+ba2_19 = Node("PremiumsReceivableAtCarryingValue", attribute = "debit", parent = ba1_16)
+ba2_20 = Node("OtherReceivables", attribute = "debit", parent = ba1_16)
+
+"""
+Banks - Liabilities
+"""
+#Level 1
+bl1_1 = Node("FederalFundsPurchasedAndSecuritiesSoldUnderAgreementsToRepurchase", attribute = "credit") #Securities Loaned
+bl1_2 = Node("CarryingValueOfSecuritiesSoldUnderRepurchaseAgreementsAndDepositsReceivedForSecuritiesLoaned", attribute = "credit", parent = bl1_1)
+
+bl1_3 = Node("Deposits", attribute = "credit") #Total Deposits
+
+bl1_4 = Node("TradingLiabilities", attribute = "credit") #Trading Liabilities
+
+bl1_5 = Node("ShortTermBorrowings", attribute = "credit") #Short-Term Debt
+
+bl1_6 = Node("LongTermDebtAndCapitalLeaseObligationsIncludingCurrentMaturities", attribute = "credit") #Long-Term Debt
+
+bl1_8 = Node("AccountsPayableAndAccruedLiabilitiesCurrentAndNoncurrent", attribute = "credit") # Accounts Payable and Accrued Liabilities
+
+bl1_9 = Node("FinancialInstrumentsSoldNotYetPurchasedAtFairValue", attribute = "credit") # Short-sales
+
+bl1_10 = Node("Other", attribute = "credit")
+
+#Level 2
+bl2_1 = Node("FederalFundsPurchased", attribute = "credit", parent = bl1_2)
+bl2_2 = Node("SecuritiesSoldUnderAgreementsToRepurchase", attribute = "credit", parent = bl1_2)
+
+bl2_3 = Node("LongTermDebt", attribute = "credit", parent = bl1_6)
+
+bl2_4 = Node("AccountsPayableCurrentAndNoncurrent", attribute = "credit", parent = bl1_8)
+bl2_5 = Node("AccruedLiabilitiesCurrentAndNoncurrent", attribute = "credit", parent = bl1_8)
+
+
+#Level 3
+
+bl3_1 = Node("AccruedLiabilitiesAndOtherLiabilities", attribute = "credit", parent = bl2_5)
+bl3_2 = Node("EmployeeRelatedLiabilitiesCurrentAndNoncurrent", attribute = "credit", parent = bl2_5)
+bl3_3 = Node("OtherAccruedLiabilitiesCurrentAndNoncurrent", attribute = "credit", parent = bl2_5)
+
+bl3_4 = Node("PayablesToCustomers", attribute = "credit", parent = bl2_4)
+bl3_5 = Node("AccountsPayableTradeCurrentAndNoncurrent", attribute = "credit", parent = bl2_4)
+bl3_6 = Node("AccountsPayableInterestBearingCurrentAndNoncurrent", attribute = "credit", parent = bl2_4)
+
+#Level 4
+
+bl4_1 = Node("AccruedEmployeeBenefitsCurrentAndNoncurrent", attribute = "credit", parent = bl3_2)
+bl4_2 = Node("AccruedSalariesCurrentAndNoncurrent", attribute = "credit", parent = bl3_2)
+bl4_3 = Node("WorkersCompensationLiabilityCurrentAndNoncurrent", attribute = "credit", parent = bl3_2)
+bl4_4 = Node("OtherEmployeeRelatedLiabilitiesCurrentAndNoncurrent", attribute = "credit", parent = bl3_2)
+
+
+
+
+"""
+EPS
 """
 
 eps = Node("EarningsPerShareBasic", attribute = "credit")
 eps_d = Node("EarningsPerShareDiluted", attribute = "credit")
+
+"""
+Net Income
+"""
 
 ni = Node("NetIncomeLoss", attribute="credit")
 
@@ -696,14 +862,11 @@ ni1_1 = Node("ProfitLoss", attribute="credit", parent=ni)
 """
 Pre-tax income
 """
-pti = Node("IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest",
-           attribute="credit", parent=ni)
+pti = Node("IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest", attribute="credit", parent=ni)
 
 # Level 1
 
-pti1_1 = Node(
-    "IncomeLossFromContinuingOperationsBeforeIncomeTaxesMinorityInterestAndIncomeLossFromEquityMethodInvestments",
-    attribute="credit", parent=pti)
+pti1_1 = Node("IncomeLossFromContinuingOperationsBeforeIncomeTaxesMinorityInterestAndIncomeLossFromEquityMethodInvestments", attribute="credit", parent=pti)
 
 """
 Tax
@@ -885,8 +1048,7 @@ opex2_33 = Node("ClearanceFees", attribute="debit", parent=opex1_11)
 
 opex3_1 = Node("ResearchAndDevelopmentExpenseExcludingAcquiredInProcessCost", attribute="debit", parent=opex2_1)
 opex3_2 = Node("ResearchAndDevelopmentExpenseSoftwareExcludingAcquiredInProcessCost", attribute="debit", parent=opex2_1)
-opex3_3 = Node("ResearchAndDevelopmentAssetAcquiredOtherThanThroughBusinessCombinationWrittenOff", attribute="debit",
-               parent=opex2_1)
+opex3_3 = Node("ResearchAndDevelopmentAssetAcquiredOtherThanThroughBusinessCombinationWrittenOff", attribute="debit", parent=opex2_1)
 
 opex3_4 = Node("DepreciationNonproduction", attribute="debit", parent=opex2_2)
 opex3_5 = Node("DepletionOfOilAndGasProperties", attribute="debit", parent=opex2_2)
@@ -950,8 +1112,7 @@ opex4_8 = Node("AmortizationOfAdvanceRoyalty", attribute="debit", parent=opex3_6
 opex4_9 = Node("AmortizationOfDeferredPropertyTaxes", attribute="debit", parent=opex3_6)
 opex4_10 = Node("AmortizationOfRateDeferral", attribute="debit", parent=opex3_6)
 opex4_11 = Node("AmortizationOfDeferredHedgeGains", attribute="debit", parent=opex3_6)
-opex4_12 = Node("AmortizationAndDepreciationOfDecontaminatingAndDecommissioningAssets", attribute="debit",
-                parent=opex3_6)
+opex4_12 = Node("AmortizationAndDepreciationOfDecontaminatingAndDecommissioningAssets", attribute="debit", parent=opex3_6)
 opex4_13 = Node("OtherAmortizationOfDeferredCharges", attribute="debit", parent=opex3_6)
 
 opex4_14 = Node("BusinessExitCosts1", attribute="debit", parent=opex3_8)
@@ -1011,10 +1172,8 @@ noi1_13 = Node("ConversionGainsAndLossesOnForeignInvestments", attribute="credit
 noi1_14 = Node("ProfitLossFromRealEstateOperations", attribute="credit", parent=noi)
 noi1_15 = Node("MortgageServicingRightsMSRImpairmentRecovery", attribute="credit", parent=noi)
 noi1_16 = Node("DebtInstrumentConvertibleBeneficialConversionFeature", attribute="credit", parent=noi)
-noi1_17 = Node("PublicUtilitiesAllowanceForFundsUsedDuringConstructionCapitalizedCostOfEquity", attribute="credit",
-               parent=noi)
-noi1_18 = Node("NetPeriodicDefinedBenefitsExpenseReversalOfExpenseExcludingServiceCostComponent", attribute="debit",
-               parent=noi)
+noi1_17 = Node("PublicUtilitiesAllowanceForFundsUsedDuringConstructionCapitalizedCostOfEquity", attribute="credit", parent=noi)
+noi1_18 = Node("NetPeriodicDefinedBenefitsExpenseReversalOfExpenseExcludingServiceCostComponent", attribute="debit", parent=noi)
 noi1_19 = Node("OtherNonoperatingIncomeExpense", attribute="credit", parent=noi)
 noi1_20 = Node("UnusualOrInfrequentItemNetGainLoss", attribute="debit", parent=noi)
 
@@ -1034,8 +1193,7 @@ noi2_9 = Node("ForeignCurrencyTransactionGainLossUnrealized", attribute="credit"
 noi2_10 = Node("OtherNonoperatingIncome", attribute="credit", parent=noi1_19)
 noi2_11 = Node("OtherNonoperatingExpense", attribute="debit", parent=noi1_19)
 
-noi2_12 = Node("DiscontinuedApplicationOfSpecializedAccountingForRegulatedOperations", attribute="credit",
-               parent=noi1_20)
+noi2_12 = Node("DiscontinuedApplicationOfSpecializedAccountingForRegulatedOperations", attribute="credit", parent=noi1_20)
 noi2_13 = Node("UnusualOrInfrequentItemGainGross", attribute="credit", parent=noi1_20)
 noi2_14 = Node("UnusualOrInfrequentItemNetOfInsuranceProceeds", attribute="debit", parent=noi1_20)
 
@@ -1046,8 +1204,7 @@ noi3_2 = Node("VentureCapitalGainsLossesNet", attribute="credit", parent=noi2_1)
 noi3_3 = Node("DisposalGroupNotDiscontinuedOperationGainLossOnDisposal", attribute="credit", parent=noi2_1)
 noi3_4 = Node("GainLossOnSaleOfStockInSubsidiaryOrEquityMethodInvestee", attribute="credit", parent=noi2_1)
 noi3_5 = Node("DeconsolidationGainOrLossAmount", attribute="credit", parent=noi2_1)
-noi3_6 = Node("GainLossOnSaleOfPreviouslyUnissuedStockBySubsidiaryOrEquityInvesteeNonoperatingIncome",
-              attribute="credit", parent=noi2_1)
+noi3_6 = Node("GainLossOnSaleOfPreviouslyUnissuedStockBySubsidiaryOrEquityInvesteeNonoperatingIncome", attribute="credit", parent=noi2_1)
 noi3_7 = Node("GainLossOnSaleOfInterestInProjects", attribute="credit", parent=noi2_1)
 noi3_8 = Node("GainLossOnDerivativeInstrumentsNetPretax", attribute="credit", parent=noi2_1)
 noi3_9 = Node("BusinessCombinationBargainPurchaseGainRecognizedAmount", attribute="credit", parent=noi2_1)
@@ -1055,8 +1212,7 @@ noi3_10 = Node("OtherNonoperatingGainsLosses", attribute="credit", parent=noi2_1
 
 noi3_11 = Node("LeveragedLeasesIncomeStatementIncomeFromLeveragedLeases", attribute="credit", parent=noi2_6)
 noi3_12 = Node("LeveragedLeasesIncomeStatementIncomeTaxExpenseOnLeveragedLeases", attribute="debit", parent=noi2_6)
-noi3_13 = Node("LeveragedLeasesIncomeStatementInvestmentTaxCreditRecognizedOnLeveragedLeases", attribute="credit",
-               parent=noi2_6)
+noi3_13 = Node("LeveragedLeasesIncomeStatementInvestmentTaxCreditRecognizedOnLeveragedLeases", attribute="credit", parent=noi2_6)
 
 noi3_14 = Node("InvestmentIncomeInterestAndDividend", attribute="credit", parent=noi2_6)
 noi3_15 = Node("InvestmentIncomeNetAmortizationOfDiscountAndPremium", attribute="credit", parent=noi2_6)
@@ -1087,8 +1243,7 @@ noi4_11 = Node("InvestmentIncomeAmortizationOfPremium", attribute="credit", pare
 
 # Level 5
 
-noi5_1 = Node("GainLossOnInterestRateDerivativeInstrumentsNotDesignatedAsHedgingInstruments", attribute="credit",
-              parent=noi4_7)
+noi5_1 = Node("GainLossOnInterestRateDerivativeInstrumentsNotDesignatedAsHedgingInstruments", attribute="credit", parent=noi4_7)
 noi5_2 = Node("GainLossOnDerivativeInstrumentsHeldForTradingPurposesNet", attribute="credit", parent=noi4_7)
 
 noi5_3 = Node("InterestIncomeRelatedParty", attribute="credit", parent=noi4_8)
@@ -1134,8 +1289,7 @@ ide2_6 = Node("InterestExpenseOther", attribute="debit", parent=ide1_1)
 ide2_7 = Node("InterestExpenseDeposits", attribute="debit", parent=ide1_1)
 ide2_8 = Node("InterestExpenseTradingLiabilities", attribute="debit", parent=ide1_1)
 ide2_9 = Node("InterestExpenseBorrowings", attribute="debit", parent=ide1_1)
-ide2_10 = Node("InterestExpenseBeneficialInterestsIssuedByConsolidatedVariableInterestEntities", attribute="debit",
-               parent=ide1_1)
+ide2_10 = Node("InterestExpenseBeneficialInterestsIssuedByConsolidatedVariableInterestEntities", attribute="debit", parent=ide1_1)
 ide2_11 = Node("InterestExpenseTrustPreferredSecurities", attribute="debit", parent=ide1_1)
 
 ide2_10 = Node("GainsLossesOnExtinguishmentOfDebtBeforeWriteOffOfDeferredDebtIssuanceCost", attribute="credit",
@@ -1155,10 +1309,8 @@ ide4_2 = Node("InterestExpenseDemandDepositAccounts", attribute="debit", parent=
 ide4_3 = Node("InterestExpenseTimeDeposits", attribute="debit", parent=ide3_1)
 ide4_4 = Node("InterestExpenseOtherDomesticDeposits", attribute="debit", parent=ide3_1)
 
-ide4_5 = Node("InterestExpenseFederalFundsPurchasedAndSecuritiesSoldUnderAgreementsToRepurchase", attribute="debit",
-              parent=ide3_3)
-ide4_6 = Node("InterestExpenseShortTermBorrowingsExcludingFederalFundsAndSecuritiesSoldUnderAgreementsToRepurchase",
-              attribute="debit", parent=ide3_3)
+ide4_5 = Node("InterestExpenseFederalFundsPurchasedAndSecuritiesSoldUnderAgreementsToRepurchase", attribute="debit", parent=ide3_3)
+ide4_6 = Node("InterestExpenseShortTermBorrowingsExcludingFederalFundsAndSecuritiesSoldUnderAgreementsToRepurchase", attribute="debit", parent=ide3_3)
 
 ide4_7 = Node("InterestExpenseLongTermDebt", attribute="debit", parent=ide3_4)
 ide4_8 = Node("InterestExpenseCapitalSecurities", attribute="debit", parent=ide3_4)
@@ -1175,8 +1327,7 @@ ide5_5 = Node("InterestExpenseTimeDeposits100000OrMore", attribute="debit", pare
 ide5_6 = Node("InterestExpenseFederalFundsPurchased", attribute="debit", parent=ide4_5)
 ide5_7 = Node("InterestExpenseSecuritiesSoldUnderAgreementsToRepurchase", attribute="debit", parent=ide4_5)
 
-ide5_8 = Node("InterestExpenseFederalHomeLoanBankAndFederalReserveBankAdvancesShortTerm", attribute="debit",
-              parent=ide4_6)
+ide5_8 = Node("InterestExpenseFederalHomeLoanBankAndFederalReserveBankAdvancesShortTerm", attribute="debit", parent=ide4_6)
 ide5_9 = Node("InterestExpenseCommercialPaper", attribute="debit", parent=ide4_6)
 ide5_10 = Node("InterestExpenseOtherShortTermBorrowings", attribute="debit", parent=ide4_6)
 
@@ -1226,21 +1377,14 @@ ca1_16 = Node("FinancingReceivableAccruedInterestAfterAllowanceForCreditLoss", a
 ca1_17 = Node("AccountsReceivableNoncurrentAccruedInterestAfterAllowanceForCreditLoss", attribute="debit", parent=ca)
 ca1_18 = Node("DebtSecuritiesHeldToMaturityAccruedInterestAfterAllowanceForCreditLoss", attribute="debit", parent=ca)
 ca1_19 = Node("NetInvestmentInLeaseAccruedInterestAfterAllowanceForCreditLoss", attribute="debit", parent=ca)
-ca1_20 = Node("SalesTypeLeaseNetInvestmentInLeaseAccruedInterestAfterAllowanceForCreditLoss", attribute="debit",
-              parent=ca)
-ca1_21 = Node("DirectFinancingLeaseNetInvestmentInLeaseAccruedInterestAfterAllowanceForCreditLoss", attribute="debit",
-              parent=ca)
+ca1_20 = Node("SalesTypeLeaseNetInvestmentInLeaseAccruedInterestAfterAllowanceForCreditLoss", attribute="debit", parent=ca)
+ca1_21 = Node("DirectFinancingLeaseNetInvestmentInLeaseAccruedInterestAfterAllowanceForCreditLoss", attribute="debit", parent=ca)
 ca1_22 = Node("FinancialAssetAmortizedCostAccruedInterestAfterAllowanceForCreditLoss", attribute="debit", parent=ca)
-ca1_23 = Node("DebtSecuritiesAvailableForSaleAccruedInterestAfterAllowanceForCreditLossCurrent", attribute="debit",
-              parent=ca)
-ca1_24 = Node("FinancingReceivableExcludingAccruedInterestAfterAllowanceForCreditLossCurrent", attribute="debit",
-              parent=ca)
-ca1_25 = Node("DebtSecuritiesHeldToMaturityExcludingAccruedInterestAfterAllowanceForCreditLossCurrent",
-              attribute="debit", parent=ca)
-ca1_26 = Node("NetInvestmentInLeaseExcludingAccruedInterestAfterAllowanceForCreditLossCurrent", attribute="debit",
-              parent=ca)
-ca1_27 = Node("DebtSecuritiesAvailableForSaleAmortizedCostExcludingAccruedInterestAfterAllowanceForCreditLossCurrent",
-              attribute="debit", parent=ca)
+ca1_23 = Node("DebtSecuritiesAvailableForSaleAccruedInterestAfterAllowanceForCreditLossCurrent", attribute="debit", parent=ca)
+ca1_24 = Node("FinancingReceivableExcludingAccruedInterestAfterAllowanceForCreditLossCurrent", attribute="debit", parent=ca)
+ca1_25 = Node("DebtSecuritiesHeldToMaturityExcludingAccruedInterestAfterAllowanceForCreditLossCurrent", attribute="debit", parent=ca)
+ca1_26 = Node("NetInvestmentInLeaseExcludingAccruedInterestAfterAllowanceForCreditLossCurrent", attribute="debit", parent=ca)
+ca1_27 = Node("DebtSecuritiesAvailableForSaleAmortizedCostExcludingAccruedInterestAfterAllowanceForCreditLossCurrent", attribute="debit", parent=ca)
 ca1_28 = Node("AdvanceRoyaltiesCurrent", attribute="debit", parent=ca)
 ca1_29 = Node("AssetsOfDisposalGroupIncludingDiscontinuedOperationCurrent", attribute="debit", parent=ca)
 ca1_30 = Node("AssetsHeldForSaleNotPartOfDisposalGroupCurrent", attribute="debit", parent=ca)
@@ -1282,10 +1426,8 @@ ca2_18 = Node("NetInvestmentInLeaseExcludingAccruedInterestBeforeAllowanceForCre
 ca2_19 = Node("NetInvestmentInLeaseAllowanceForCreditLossExcludingAccruedInterestCurrent", attribute="credit",
               parent=ca1_26)
 
-ca2_20 = Node("DebtSecuritiesAvailableForSaleAmortizedCostExcludingAccruedInterestBeforeAllowanceForCreditLossCurrent",
-              attribute="debit", parent=ca1_27)
-ca2_21 = Node("DebtSecuritiesAvailableForSaleAmortizedCostAllowanceForCreditLossExcludingAccruedInterestCurrent",
-              attribute="credit", parent=ca1_27)
+ca2_20 = Node("DebtSecuritiesAvailableForSaleAmortizedCostExcludingAccruedInterestBeforeAllowanceForCreditLossCurrent", attribute="debit", parent=ca1_27)
+ca2_21 = Node("DebtSecuritiesAvailableForSaleAmortizedCostAllowanceForCreditLossExcludingAccruedInterestCurrent", attribute="credit", parent=ca1_27)
 
 ca2_22 = Node("DisposalGroupIncludingDiscontinuedOperationCashAndCashEquivalents", attribute="debit", parent=ca1_29)
 ca2_23 = Node("DisposalGroupIncludingDiscontinuedOperationInventoryCurrent", attribute="debit", parent=ca1_29)
@@ -1423,21 +1565,15 @@ nca1_5 = Node("AccountsReceivableExcludingAccruedInterestAfterAllowanceForCredit
               parent=nca)
 nca1_6 = Node("FinancingReceivableExcludingAccruedInterestAfterAllowanceForCreditLossNoncurrent", attribute="debit",
               parent=nca)
-nca1_7 = Node("DebtSecuritiesHeldToMaturityExcludingAccruedInterestAfterAllowanceForCreditLossNoncurrent",
-              attribute="debit", parent=nca)
-nca1_8 = Node("NetInvestmentInLeaseExcludingAccruedInterestAfterAllowanceForCreditLossNoncurrent", attribute="debit",
-              parent=nca)
-nca1_9 = Node(
-    "DebtSecuritiesAvailableForSaleAmortizedCostExcludingAccruedInterestAfterAllowanceForCreditLossNoncurrent",
-    attribute="debit", parent=nca)
-nca1_10 = Node("LeveragedLeasesNetInvestmentInLeveragedLeasesDisclosureInvestmentInLeveragedLeasesNet",
-               attribute="debit", parent=nca)
+nca1_7 = Node("DebtSecuritiesHeldToMaturityExcludingAccruedInterestAfterAllowanceForCreditLossNoncurrent", attribute="debit", parent=nca)
+nca1_8 = Node("NetInvestmentInLeaseExcludingAccruedInterestAfterAllowanceForCreditLossNoncurrent", attribute="debit", parent=nca)
+nca1_9 = Node("DebtSecuritiesAvailableForSaleAmortizedCostExcludingAccruedInterestAfterAllowanceForCreditLossNoncurrent", attribute="debit", parent=nca)
+nca1_10 = Node("LeveragedLeasesNetInvestmentInLeveragedLeasesDisclosureInvestmentInLeveragedLeasesNet", attribute="debit", parent=nca)
 nca1_11 = Node("InventoryRealEstate", attribute="debit", parent=nca)
 nca1_12 = Node("NontradeReceivablesNoncurrent", attribute="debit", parent=nca)
 nca1_13 = Node("PropertyPlantAndEquipmentNet", attribute="debit", parent=nca)
 nca1_14 = Node("PropertyPlantAndEquipmentCollectionsNotCapitalized", attribute="debit", parent=nca)
-nca1_15 = Node("DebtSecuritiesAvailableForSaleAccruedInterestAfterAllowanceForCreditLossNoncurrent", attribute="debit",
-               parent=nca)
+nca1_15 = Node("DebtSecuritiesAvailableForSaleAccruedInterestAfterAllowanceForCreditLossNoncurrent", attribute="debit", parent=nca)
 nca1_16 = Node("OilAndGasPropertySuccessfulEffortMethodNet", attribute="debit", parent=nca)
 nca1_17 = Node("OilAndGasPropertyFullCostMethodNet", attribute="debit", parent=nca)
 nca1_18 = Node("LongTermInvestmentsAndReceivablesNet", attribute="debit", parent=nca)
@@ -1468,31 +1604,20 @@ nca2_1 = Node("InventoryDrillingNoncurrent", attribute="debit", parent=nca1_1)
 nca2_2 = Node("InventoryGasInStorageUndergroundNoncurrent", attribute="debit", parent=nca1_1)
 nca2_3 = Node("OtherInventoryNoncurrent", attribute="debit", parent=nca1_1)
 
-nca2_4 = Node("AccountsReceivableExcludingAccruedInterestBeforeAllowanceForCreditLossNoncurrent", attribute="debit",
-              parent=nca1_5)
-nca2_5 = Node("AccountsReceivableAllowanceForCreditLossExcludingAccruedInterestNoncurrent", attribute="credit",
-              parent=nca1_5)
+nca2_4 = Node("AccountsReceivableExcludingAccruedInterestBeforeAllowanceForCreditLossNoncurrent", attribute="debit", parent=nca1_5)
+nca2_5 = Node("AccountsReceivableAllowanceForCreditLossExcludingAccruedInterestNoncurrent", attribute="credit", parent=nca1_5)
 
-nca2_6 = Node("FinancingReceivableExcludingAccruedInterestBeforeAllowanceForCreditLossNoncurrent", attribute="debit",
-              parent=nca1_6)
-nca2_7 = Node("FinancingReceivableAllowanceForCreditLossExcludingAccruedInterestNoncurrent", attribute="credit",
-              parent=nca1_6)
+nca2_6 = Node("FinancingReceivableExcludingAccruedInterestBeforeAllowanceForCreditLossNoncurrent", attribute="debit", parent=nca1_6)
+nca2_7 = Node("FinancingReceivableAllowanceForCreditLossExcludingAccruedInterestNoncurrent", attribute="credit", parent=nca1_6)
 
-nca2_8 = Node("DebtSecuritiesHeldToMaturityExcludingAccruedInterestBeforeAllowanceForCreditLossNoncurrent",
-              attribute="debit", parent=nca1_7)
-nca2_9 = Node("DebtSecuritiesHeldToMaturityAllowanceForCreditLossExcludingAccruedInterestNoncurrent",
-              attribute="credit", parent=nca1_7)
+nca2_8 = Node("DebtSecuritiesHeldToMaturityExcludingAccruedInterestBeforeAllowanceForCreditLossNoncurrent", attribute="debit", parent=nca1_7)
+nca2_9 = Node("DebtSecuritiesHeldToMaturityAllowanceForCreditLossExcludingAccruedInterestNoncurrent", attribute="credit", parent=nca1_7)
 
-nca2_10 = Node("NetInvestmentInLeaseExcludingAccruedInterestBeforeAllowanceForCreditLossNoncurrent", attribute="debit",
-               parent=nca1_8)
-nca2_11 = Node("NetInvestmentInLeaseAllowanceForCreditLossExcludingAccruedInterestNoncurrent", attribute="credit",
-               parent=nca1_8)
+nca2_10 = Node("NetInvestmentInLeaseExcludingAccruedInterestBeforeAllowanceForCreditLossNoncurrent", attribute="debit", parent=nca1_8)
+nca2_11 = Node("NetInvestmentInLeaseAllowanceForCreditLossExcludingAccruedInterestNoncurrent", attribute="credit", parent=nca1_8)
 
-nca2_12 = Node(
-    "DebtSecuritiesAvailableForSaleAmortizedCostExcludingAccruedInterestBeforeAllowanceForCreditLossNoncurrent",
-    attribute="debit", parent=nca1_9)
-nca2_13 = Node("DebtSecuritiesAvailableForSaleAmortizedCostAllowanceForCreditLossExcludingAccruedInterestNoncurrent",
-               attribute="credit", parent=nca1_9)
+nca2_12 = Node("DebtSecuritiesAvailableForSaleAmortizedCostExcludingAccruedInterestBeforeAllowanceForCreditLossNoncurrent", attribute="debit", parent=nca1_9)
+nca2_13 = Node("DebtSecuritiesAvailableForSaleAmortizedCostAllowanceForCreditLossExcludingAccruedInterestNoncurrent", attribute="credit", parent=nca1_9)
 
 nca2_13 = Node("InventoryRealEstateImprovements", attribute="debit", parent=nca1_11)
 nca2_14 = Node("InventoryRealEstateHeldForSale", attribute="debit", parent=nca1_11)
