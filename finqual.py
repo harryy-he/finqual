@@ -67,6 +67,7 @@ class Ticker():
         self.ticker = ticker
         self.cik = self.CIK()
         self.data = self.SEC()
+        self.SIC = self.SIC()
 
     def CIK(self):
         headers = {"Accept": "application/json, text/plain, */*", "Accept-Encoding": "gzip, deflate, br",
@@ -111,6 +112,17 @@ class Ticker():
             else:  # Handle wraparound from end of year to start of year
                 return (start_month, start_day) <= (date_month, date_day) or (date_month, date_day) <= (
                     end_month, end_day)
+
+    def SIC(self):
+        this_dir, this_filename = os.path.split(__file__)
+        sic_path = os.path.join(this_dir, "data", "sec_sic.csv")
+
+        sic = pd.read_csv(sic_path, index_col=0)
+        sic = sic.dropna()
+
+        sic_code = sic[sic["ticker"] == self.ticker]["SIC"].values[0]
+
+        return sic_code
 
     def date_quarter(self, date, q1, q2, q3, q4):
         quarter_list = [(q1, 1), (q2, 2), (q3, 3), (q4, 4)]
@@ -364,7 +376,6 @@ class Ticker():
         year_list = [i for i in np.arange(end, start - 2, -1)]
         quarter_list = [str(i) + "Q" + str(j) for i in year_list for j in np.arange(4, 0, -1)]
 
-        bank_sic = []
         """
         Creating list of income statement items and their names
         """
@@ -510,13 +521,8 @@ class Ticker():
         """
         Getting SIC code
         """
-        this_dir, this_filename = os.path.split(__file__)
-        sic_path = os.path.join(this_dir, "data", "sec_sic.csv")
 
-        sic = pd.read_csv(sic_path, index_col=0)
-        sic = sic.dropna()
-
-        sic_code = sic[sic["ticker"] == self.ticker]["SIC"].values[0]
+        sic_code = self.SIC
 
         bank_codes = [6022, 6021, 6211, 6029, 6035, 6199]
 
@@ -652,9 +658,11 @@ class Ticker():
     def ratios(self, start, end):
 
         df = self.data
+        sic_code = self.SIC
+        bank_codes = [6022, 6021, 6211, 6029, 6035, 6199]
 
         balance_r = self.balance(start - 1, end)
-        income_r = self.income(start, end)
+        income_r = self.income(start, end).astype(float)
         cash_r = self.cashflow(start, end)
 
         year_list = [i for i in np.arange(end, start - 1, -1)]
@@ -677,40 +685,63 @@ class Ticker():
         operating_profit = income_r.loc["Operating Profit"]
         tax = income_r.loc["Tax"]
 
-        current_assets = balance_r.loc["Total Current Assets"]
-        total_assets = balance_r.loc["Total Assets"]
-        current_liabilities = balance_r.loc["Total Current Liabilities"]
-        total_liabilities = balance_r.loc["Total Liabilities"]
-        total_se = balance_r.loc["Stockholder's Equity"]
-        total_equity = balance_r.loc["Total Equity"]
-        inventory = balance_r.loc["Inventories"]
-        cash = balance_r.loc["Cash and Cash Equivalents"]
+        if sic_code in bank_codes:
+            total_assets = balance_r.loc["Total Assets"]
+            total_liabilities = balance_r.loc["Total Liabilities"]
+            total_se = balance_r.loc["Stockholder's Equity"]
+            total_equity = balance_r.loc["Total Equity"]
+            cash = balance_r.loc["Cash and Cash Equivalents"]
+
+        else:
+            current_assets = balance_r.loc["Total Current Assets"]
+            total_assets = balance_r.loc["Total Assets"]
+            current_liabilities = balance_r.loc["Total Current Liabilities"]
+            total_liabilities = balance_r.loc["Total Liabilities"]
+            total_se = balance_r.loc["Stockholder's Equity"]
+            total_equity = balance_r.loc["Total Equity"]
+            inventory = balance_r.loc["Inventories"]
+            cash = balance_r.loc["Cash and Cash Equivalents"]
+            nwc = (current_assets - current_liabilities).diff(-1)
 
         fcf = cash_r.loc["Free Cash Flow"]
 
-        nwc = (current_assets - current_liabilities).diff(-1)
-
         d_a = pd.Series(self.year_tree_item(cce5_2, start, end, "income"), index=year_list)
         capex = pd.Series(self.year_tree_item(cce4_8, start, end, "cashflow"), index=year_list)
-        ufcf = operating_profit + tax - capex + d_a - nwc
+
+        if sic_code in bank_codes:
+            ufcf = operating_profit + tax - capex + d_a
+        else:
+            ufcf = operating_profit + tax - capex + d_a - nwc
 
         cap = cap + total_liabilities - cash
 
         ratio_df = pd.DataFrame(columns=year_list)
 
-        ratio_df.loc["Current Ratio"] = (current_assets / current_liabilities)
-        ratio_df.loc["Quick Ratio"] = ((current_assets - inventory) / current_liabilities)
+        if sic_code in bank_codes:
+            ratio_df.loc["Debt-to-Equity Ratio"] = (total_liabilities / total_se)
 
-        ratio_df.loc["Debt-to-Equity Ratio"] = (total_liabilities / total_se)
+            ratio_df.loc["Return on Equity"] = (net_profit / total_se)
+            ratio_df.loc["Return on Assets"] = (net_profit / total_assets)
+            ratio_df.loc["Return on Invested Capital"] = (operating_profit + tax) / (total_liabilities + total_equity)
 
-        ratio_df.loc["Return on Equity"] = (net_profit / total_se)
-        ratio_df.loc["Return on Assets"] = (net_profit / total_assets)
-        ratio_df.loc["Return on Capital Employed"] = ebit / (total_assets - current_liabilities)
-        ratio_df.loc["Return on Invested Capital"] = (operating_profit + tax) / (total_liabilities + total_equity)
+            ratio_df.loc["FCFF Yield"] = ufcf / (cap)
 
-        ratio_df.loc["FCFF Yield"] = ufcf / (cap)
+            ratio_df.loc["EV/EBITDA"] = (cap / ebitda)
 
-        ratio_df.loc["EV/EBITDA"] = (cap / ebitda)
+        else:
+            ratio_df.loc["Current Ratio"] = (current_assets / current_liabilities)
+            ratio_df.loc["Quick Ratio"] = ((current_assets - inventory) / current_liabilities)
+
+            ratio_df.loc["Debt-to-Equity Ratio"] = (total_liabilities / total_se)
+
+            ratio_df.loc["Return on Equity"] = (net_profit / total_se)
+            ratio_df.loc["Return on Assets"] = (net_profit / total_assets)
+            ratio_df.loc["Return on Capital Employed"] = ebit / (total_assets - current_liabilities)
+            ratio_df.loc["Return on Invested Capital"] = (operating_profit + tax) / (total_liabilities + total_equity)
+
+            ratio_df.loc["FCFF Yield"] = ufcf / (cap)
+
+            ratio_df.loc["EV/EBITDA"] = (cap / ebitda)
 
         ratio_df.dropna(axis=1, how='all', inplace=True)
 
