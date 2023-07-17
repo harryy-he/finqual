@@ -71,7 +71,7 @@ The `comparables` function returns a list of `n` comparable companies based on t
 
 ## Dependencies
 
-Only four packages are required, with the following versions confirmed to be working:
+Only five packages are required, with the following versions confirmed to be working:
 
 | Package   | Version   |
 |-----------|-----------|
