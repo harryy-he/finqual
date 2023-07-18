@@ -2265,37 +2265,42 @@ cce = Node("CashAndCashEquivalentsPeriodIncreaseDecrease", attribute="debit")
 cce1 = Node("CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents", attribute="debit")
 cce2 = Node("CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalentsIncludingDisposalGroupAndDiscontinuedOperations", attribute="debit", parent=cce1)
 cce3 = Node("CashAndCashEquivalentsAtCarryingValue", attribute="debit", parent=cce2)
+cce4 = Node("CashAndCashEquivalents", attribute="debit", parent=cce3)
 
 # Level 1
 
 cce1_1 = Node("EffectOfExchangeRateOnCashCashEquivalentsRestrictedCashAndRestrictedCashEquivalentsIncludingDisposalGroupAndDiscontinuedOperations", attribute="debit", parent=cce)
 cce1_3 = Node("EffectOfExchangeRateOnCashAndCashEquivalents", attribute="debit", parent=cce1_1)
+cce1_4 = Node("EffectOfExchangeRateChangesOnCashAndCashEquivalents", attribute="debit", parent=cce1_3)
 
 cce1_2 = Node("CashAndCashEquivalentsPeriodIncreaseDecreaseExcludingExchangeRateEffect", attribute="debit", parent=cce)
 
 # Level 2
 
-cce2_1 = Node("EffectOfExchangeRateOnCashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents", attribute="debit", parent=cce1_3)
+cce2_1 = Node("EffectOfExchangeRateOnCashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents", attribute="debit", parent=cce1_4)
 cce2_2 = Node("EffectOfExchangeRateOnCashCashEquivalentsRestrictedCashAndRestrictedCashEquivalentsDisposalGroupIncludingDiscontinuedOperations", attribute="debit", parent=cce2_1)
 
 cce2_3 = Node("NetCashProvidedByUsedInOperatingActivities", attribute="debit", parent=cce1_2)
+cce2_3_1 = Node("CashFlowsFromUsedInOperatingActivities", attribute="debit", parent=cce2_3)
 cce2_4 = Node("NetCashProvidedByUsedInInvestingActivities", attribute="debit", parent=cce1_2)
+cce2_4_1 = Node("CashFlowsFromUsedInInvestingActivities", attribute="debit", parent=cce2_4)
 cce2_5 = Node("NetCashProvidedByUsedInFinancingActivities", attribute="debit", parent=cce1_2)
+cce2_5_1 = Node("CashFlowsFromUsedInFinancingActivities", attribute="debit", parent=cce2_5)
 
 # Level 3
 
 cce3_7 = Node("EffectOfExchangeRateOnCashAndCashEquivalentsContinuingOperations", attribute="debit", parent=cce2_2)
 cce3_8 = Node("EffectOfExchangeRateOnCashAndCashEquivalentsDiscontinuedOperations", attribute="debit", parent=cce2_2)
 
-cce3_1 = Node("ProfitLoss", attribute="debit", parent=cce2_3)
+cce3_1 = Node("ProfitLoss", attribute="debit", parent=cce2_3_1)
 cce3_2 = Node("AdjustmentsToReconcileNetIncomeLossToCashProvidedByUsedInOperatingActivities", attribute="debit",
-              parent=cce2_3)
+              parent=cce2_3_1)
 
-cce3_3 = Node("NetCashProvidedByUsedInInvestingActivitiesContinuingOperations", attribute="debit", parent=cce2_4)
-cce3_4 = Node("CashProvidedByUsedInInvestingActivitiesDiscontinuedOperations", attribute="debit", parent=cce2_4)
+cce3_3 = Node("NetCashProvidedByUsedInInvestingActivitiesContinuingOperations", attribute="debit", parent=cce2_4_1)
+cce3_4 = Node("CashProvidedByUsedInInvestingActivitiesDiscontinuedOperations", attribute="debit", parent=cce2_4_1)
 
-cce3_5 = Node("NetCashProvidedByUsedInFinancingActivitiesContinuingOperations", attribute="debit", parent=cce2_5)
-cce3_6 = Node("CashProvidedByUsedInFinancingActivitiesDiscontinuedOperations", attribute="debit", parent=cce2_5)
+cce3_5 = Node("NetCashProvidedByUsedInFinancingActivitiesContinuingOperations", attribute="debit", parent=cce2_5_1)
+cce3_6 = Node("CashProvidedByUsedInFinancingActivitiesDiscontinuedOperations", attribute="debit", parent=cce2_5_1)
 
 # Level 4
 
