@@ -84,4 +84,4 @@ Only five packages are required, with the following versions confirmed to be wor
 ## Limitations
 Currently, there are several known limitations that I am aware of from my own testing. These are still to be looked at:
 
-- Missing data values for companies, this is mostly due to companies using custom tags that are not accessible via the SEC database
+- Missing data values for companies, this is mostly due to companies using custom tags that are not accessible via the SEC database or use the IFRS taxonomy instead of the US GAAP taxonomy
