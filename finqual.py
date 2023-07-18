@@ -181,8 +181,10 @@ class Ticker():
         source = requests.get(url=url, headers=headers, verify=True)
         data = source.json()
         data = pd.DataFrame(data)
-
-        return data["facts"]
+        try:
+            return data["facts"]["ifrs-full"]
+        except:
+            return data["facts"]["us-gaap"]
 
     def lookup(self, node, year, category, quarter = None):
         """
@@ -197,7 +199,7 @@ class Ticker():
             Creating search term
             """
             try:
-                df = pd.DataFrame(data["us-gaap"][item]["units"]["USD"])
+                df = pd.DataFrame(pd.DataFrame(data[item])["units"][0])
                 df.dropna(inplace = True)
                 df["frame"] = df["frame"].str.replace('I', '')
 
@@ -213,7 +215,7 @@ class Ticker():
                 pass
 
             try:
-                df = pd.DataFrame(data["us-gaap"][item]["units"]["USD/shares"])
+                df = pd.DataFrame(pd.DataFrame(data[item])["units"][0])
                 df.dropna(inplace=True)
                 df["frame"] = df["frame"].str.replace('I', '')
 
@@ -235,7 +237,7 @@ class Ticker():
             """
             try:
 
-                df = pd.DataFrame(data["us-gaap"][item]["units"]["USD"])
+                df = pd.DataFrame(pd.DataFrame(data[item])["units"][0])
                 df.dropna(inplace = True)
                 df["frame"] = df["frame"].str.replace('I', '')
                 fy = df[df["fp"] == "FY"].iloc[-1][7][-2:]
@@ -253,7 +255,7 @@ class Ticker():
 
         if (category == "cashflow"):
             try:
-                df = pd.DataFrame(data["us-gaap"][item]["units"]["USD"])
+                df = pd.DataFrame(pd.DataFrame(data[item])["units"][0])
             except:
                 return False
 
@@ -750,6 +752,12 @@ class Ticker():
         return ratio_df
 
 """
+IFRS - Income
+"""
+
+ifrs_rev = Node("Revenue", )
+
+"""
 Banks and financial services balance sheet items
 """
 
@@ -872,8 +880,6 @@ bl4_3 = Node("WorkersCompensationLiabilityCurrentAndNoncurrent", attribute = "cr
 bl4_4 = Node("OtherEmployeeRelatedLiabilitiesCurrentAndNoncurrent", attribute = "credit", parent = bl3_2)
 
 
-
-
 """
 EPS
 """
@@ -932,15 +938,18 @@ rev1_5 = Node("RegulatedAndUnregulatedOperatingRevenue", attribute="credit", par
 
 rev1_6 = Node("RevenuesNetOfInterestExpense", attribute="credit", parent=rev1_5)
 
+rev1_7 = Node("Revenue", attribute = "credit", parent = rev1_6)
+
 # Level 2
 
-rev2_1 = Node("NoninterestIncome", attribute="credit", parent=rev1_6)
-rev2_2 = Node("InterestIncomeExpenseNet", attribute="credit", parent=rev1_6)
+rev2_1 = Node("NoninterestIncome", attribute="credit", parent=rev1_7)
+rev2_2 = Node("InterestIncomeExpenseNet", attribute="credit", parent=rev1_7)
 
 """
 Cost of Revenue
 """
-cor = Node("CostOfRevenue", attribute="debit", parent=gp)
+cor = Node("CostOfSales", attribute="debit", parent=gp)
+cor1 = Node("CostOfRevenue", attribute="debit", parent=cor)
 
 # Level 1
 cor1_1 = Node("CostOfGoodsAndServicesSold", attribute="debit", parent=cor)
