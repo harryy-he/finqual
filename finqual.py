@@ -181,10 +181,7 @@ class Ticker():
         source = requests.get(url=url, headers=headers, verify=True)
         data = source.json()
         data = pd.DataFrame(data)
-        try:
-            return data["facts"]["ifrs-full"]
-        except:
-            return data["facts"]["us-gaap"]
+        return data
 
     def lookup(self, node, year, category, quarter = None):
         """
@@ -192,7 +189,14 @@ class Ticker():
         by quarter as companies may change what they file certain items under
         """
         item = node.name
+
         data = self.data
+
+        try:
+            data = data["facts"]["ifrs-full"]
+
+        except:
+            data = data["facts"]["us-gaap"]
 
         if (category == "income"):
             """
@@ -663,6 +667,7 @@ class Ticker():
     def ratios(self, start, end):
 
         df = self.data
+        df = df["facts"]
         sic_code = self.SIC
         bank_codes = [6022, 6021, 6211, 6029, 6035, 6199]
 
@@ -672,8 +677,11 @@ class Ticker():
 
         year_list = [i for i in np.arange(end, start - 1, -1)]
 
-        cap_df = pd.DataFrame(df["dei"]["EntityPublicFloat"]["units"]["USD"])
-        cap_df["fy"] = cap_df["frame"].str[2:6]
+        try:
+            cap_df = pd.DataFrame(df["dei"]["EntityPublicFloat"]["units"]["USD"])
+            cap_df["fy"] = cap_df["frame"].str[2:6]
+        except:
+            next
 
         cap = []
         for i in year_list:
