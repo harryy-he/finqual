@@ -1045,7 +1045,8 @@ cor5_3 = Node("LandingFeesAndOtherRentals", attribute="debit", parent=cor4_11)
 Operating Expenses
 """
 opex1 = Node("NoninterestExpense", attribute = "debit", parent = oi)
-opex = Node("OperatingExpenses", attribute="debit", parent=opex1)
+opex2 = Node("OperatingExpense", attribute="debit", parent=opex1)
+opex = Node("OperatingExpenses", attribute="debit", parent=opex2)
 
 # Level 1
 opex1_1 = Node("OperatingCostsAndExpenses", attribute="debit", parent=opex)
