@@ -216,22 +216,6 @@ class Ticker():
                 return df["val"].to_numpy()[df["frame"].to_numpy() == search][0]
 
             except:
-                pass
-
-            try:
-                df = pd.DataFrame(pd.DataFrame(data[item])["units"][0])
-                df.dropna(inplace=True)
-                df["frame"] = df["frame"].str.replace('I', '')
-
-                if (quarter != None):
-                    # If looking at quarter then:
-                    search = "CY" + str(year) + "Q" + str(quarter)
-                else:
-                    search = "CY" + str(year)
-
-                return df["val"].to_numpy()[df["frame"].to_numpy() == search][0]
-
-            except:
                 return False
 
         if (category == "balance"):
