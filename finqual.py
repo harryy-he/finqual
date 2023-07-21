@@ -388,21 +388,26 @@ class Ticker():
         df = self.income_helper(start, end, category, quarter, readable)
         df = df.drop(["Cost and Expenses", "Interest Expense", "Depreciation and Amortization"])
 
-        no_columns = len(df.columns)
+        no_columns = -1*len(df.columns)
 
         nodes = [s_b,s_d]
 
         data = [self.year_tree_item(i, start, end, category = "EPS", quarter = True) for i in nodes]
+        print(no_columns)
 
-        for i in data:
-            i = i[-no_columns:]
+        for i in range(len(data)):
+            if no_columns == -1:
+                data[i] = data[i][-1]
+
+            else:
+                data[i] = data[i][no_columns:]
 
         df.loc["Number of Basic Shares"] = data[0]
         df.loc["Number of Diluted Shares"] = data[1]
         df.loc["Basic EPS"] = df.loc["Net Profit"]/df.loc["Number of Basic Shares"]
         df.loc["Diluted EPS"] = df.loc["Net Profit"]/df.loc["Number of Diluted Shares"]
         df = df.round(1).applymap('{:.1f}'.format).replace('\.0$', '', regex=True)
-
+        df.replace("inf", np.nan, inplace=True)
         return df
 
     def income_helper(self, start, end, category, quarter = None, readable = None):
