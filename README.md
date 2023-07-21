@@ -4,7 +4,7 @@ This is a work in progress package that enables users to conduct fundamental fin
 
 ## Features
 
-finqual has the following features:
+finqual has the following feature:
  
 - Ability to call the income statement, balance sheet or cash flow statement for any company on SEC's Electronic Data Gathering, Analysis, and Retrieval (EDGAR) system.
 - Retrieve comparables companies for a chosen ticker on varying industry classifications (e.g. more general industry classifications or more detailed classifications)
