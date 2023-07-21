@@ -198,6 +198,38 @@ class Ticker():
         except:
             data = data["facts"]["us-gaap"]
 
+        if (category == "EPS"):
+            """
+            Creating search term
+            """
+            try:
+                df = pd.DataFrame(pd.DataFrame(data[item])["units"][0])
+                df.dropna(inplace = True)
+
+                df["frame"] = df["frame"].str.replace('CY', '')
+
+                if (quarter != None):
+                    # If looking at quarter then:
+
+                    df = df[df["frame"].str.contains(str(year))]
+
+                    unique_quarters = set(df["frame"])
+                    all_quarters = [str(year) + "Q" + str(i) for i in range(1, 5)]
+                    missing_quarter = list(set(all_quarters) - unique_quarters)
+
+                    if (len(missing_quarter) == 1):
+                        df["frame"] = df["frame"].replace(str(year), missing_quarter[0])
+
+                    search = str(year) + "Q" + str(quarter)
+
+                else:
+                    search = str(year)
+
+                return df["val"].to_numpy()[df["frame"].to_numpy() == search][0]
+
+            except:
+                return False
+
         if (category == "income"):
             """
             Creating search term
@@ -217,6 +249,7 @@ class Ticker():
 
             except:
                 return False
+
 
         if (category == "balance"):
 
@@ -355,6 +388,19 @@ class Ticker():
         df = self.income_helper(start, end, category, quarter, readable)
         df = df.drop(["Cost and Expenses", "Interest Expense", "Depreciation and Amortization"])
 
+        no_columns = len(df.columns)
+
+        nodes = [s_b,s_d]
+
+        data = [self.year_tree_item(i, start, end, category = "EPS", quarter = True) for i in nodes]
+
+        for i in data:
+            i = i[-no_columns:]
+
+        df.loc["Number of Basic Shares"] = data[0]
+        df.loc["Number of Diluted Shares"] = data[1]
+        df.loc["Basic EPS"] = df.loc["Net Profit"]/df.loc["Number of Basic Shares"]
+        df.loc["Diluted EPS"] = df.loc["Net Profit"]/df.loc["Number of Diluted Shares"]
         df = df.round(1).applymap('{:.1f}'.format).replace('\.0$', '', regex=True)
 
         return df
@@ -373,13 +419,11 @@ class Ticker():
                  oi1,
                  noi, pti1, tax1, ni,
                  cce5_2,
-                 ide1_1,
-                 eps, eps_d]
+                 ide1_1]
         node_names = ["Revenues", "Cost of Revenue", "Gross Profit", "Operating Expenses", "Cost and Expenses",
                       "Operating Profit"
                      ,"Non-Operating Income/Expense", "Pretax Profit", "Tax", "Net Profit", "Depreciation and Amortization"
-                     ,"Interest Expense"
-                     , "EPS", "Diluted EPS"]
+                     ,"Interest Expense"]
         """
         Appending each node values for each year to a data
         """
@@ -883,7 +927,14 @@ bl4_2 = Node("AccruedSalariesCurrentAndNoncurrent", attribute = "credit", parent
 bl4_3 = Node("WorkersCompensationLiabilityCurrentAndNoncurrent", attribute = "credit", parent = bl3_2)
 bl4_4 = Node("OtherEmployeeRelatedLiabilitiesCurrentAndNoncurrent", attribute = "credit", parent = bl3_2)
 
+"""
+No. of shares
+"""
+s_b = Node("WeightedAverageNumberOfSharesOutstandingBasic", attribute = "debit")
+s_d = Node("WeightedAverageNumberOfDilutedSharesOutstanding", attribute = "debit")
 
+s_b1 = Node("WeightedAverageShares", attribute = "debit", parent = s_b)
+s_d1 = Node("AdjustedWeightedAverageShares", attribute = "debit", parent = s_d)
 """
 EPS
 """
