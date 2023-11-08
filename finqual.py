@@ -406,7 +406,7 @@ class Ticker():
         df.loc["Number of Diluted Shares"] = data[1]
         df.loc["Basic EPS"] = df.loc["Net Profit"]/df.loc["Number of Basic Shares"]
         df.loc["Diluted EPS"] = df.loc["Net Profit"]/df.loc["Number of Diluted Shares"]
-        df = df.round(1).map('{:.1f}'.format).replace('\.0$', '', regex=True)
+        df = df.round(1).map('{:.1f}'.format).replace('\.0$', '', regex=True) # Changed
         df.replace("inf", np.nan, inplace=True)
         return df
 
