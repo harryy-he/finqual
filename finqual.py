@@ -81,7 +81,7 @@ class Ticker():
         cik = pd.DataFrame(cik)
         cik = cik.transpose()
 
-        value = str(cik.loc[cik["ticker"] == self.ticker]["cik_str"][0])
+        value = str(cik.loc[cik["ticker"] == self.ticker]["cik_str"].iloc[0])
 
         # Making sure the CIK is of right length
         value = value.zfill(10)
@@ -170,7 +170,7 @@ class Ticker():
         cik = pd.DataFrame(cik)
         cik = cik.transpose()
 
-        value = str(cik.loc[cik["ticker"] == self.ticker]["cik_str"][0])
+        value = str(cik.loc[cik["ticker"] == self.ticker]["cik_str"].iloc[0])
 
         # Making sure the CIK is of right length
         value = value.zfill(10)
@@ -203,7 +203,7 @@ class Ticker():
             Creating search term
             """
             try:
-                df = pd.DataFrame(pd.DataFrame(data[item])["units"][0])
+                df = pd.DataFrame(pd.DataFrame(data[item])["units"].iloc[0])
                 df.dropna(inplace = True)
 
                 df["frame"] = df["frame"].str.replace('CY', '')
@@ -235,7 +235,7 @@ class Ticker():
             Creating search term
             """
             try:
-                df = pd.DataFrame(pd.DataFrame(data[item])["units"][0])
+                df = pd.DataFrame(pd.DataFrame(data[item])["units"].iloc[0])
                 df.dropna(inplace = True)
                 df["frame"] = df["frame"].str.replace('I', '')
 
@@ -258,10 +258,10 @@ class Ticker():
             """
             try:
 
-                df = pd.DataFrame(pd.DataFrame(data[item])["units"][0])
+                df = pd.DataFrame((pd.DataFrame(data[item])["units"]).iloc[0])
                 df.dropna(inplace = True)
                 df["frame"] = df["frame"].str.replace('I', '')
-                fy = df[df["fp"] == "FY"].iloc[-1][7][-2:]
+                fy = df[df["fp"] == "FY"].iloc[-1].iloc[7][-2:]
 
                 if (quarter == None):
                     search = "CY" + str(year) + fy
@@ -276,7 +276,7 @@ class Ticker():
 
         if (category == "cashflow"):
             try:
-                df = pd.DataFrame(pd.DataFrame(data[item])["units"][0])
+                df = pd.DataFrame((pd.DataFrame(data[item])["units"]).iloc[0])
             except:
                 return False
 
@@ -406,7 +406,7 @@ class Ticker():
         df.loc["Number of Diluted Shares"] = data[1]
         df.loc["Basic EPS"] = df.loc["Net Profit"]/df.loc["Number of Basic Shares"]
         df.loc["Diluted EPS"] = df.loc["Net Profit"]/df.loc["Number of Diluted Shares"]
-        df = df.round(1).applymap('{:.1f}'.format).replace('\.0$', '', regex=True)
+        df = df.round(1).map('{:.1f}'.format).replace('\.0$', '', regex=True)
         df.replace("inf", np.nan, inplace=True)
         return df
 
