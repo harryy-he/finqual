@@ -70,7 +70,7 @@ class Ticker():
         self.SIC = self.SIC()
 
     def CIK(self):
-        headers = {"Accept": "application/json, text/plain, */*", "Accept-Encoding": "gzip, deflate, br",
+        headers = {"Accept": "application/json, text/plain, */*",
                    "Accept-Language": "en-US,en;q=0.9",
                    "Origin": "https://www.nasdaq.com",
                    "Referer": "https://www.nasdaq.com",
@@ -133,7 +133,7 @@ class Ticker():
 
     def fiscal_year(self):
 
-        headers = {"Accept": "application/json, text/plain, */*", "Accept-Encoding": "gzip, deflate, br",
+        headers = {"Accept": "application/json, text/plain, */*",
                    "Accept-Language": "en-US,en;q=0.9",
                    "Origin": "https://www.nasdaq.com",
                    "Referer": "https://www.nasdaq.com",
@@ -158,7 +158,7 @@ class Ticker():
         Function to get a Pandas dataframe from the SEC API of a chosen ticker
         """
         # Defining the headers for access
-        headers = {"Accept": "application/json, text/plain, */*", "Accept-Encoding": "gzip, deflate, br",
+        headers = {"Accept": "application/json, text/plain, */*",
                    "Accept-Language": "en-US,en;q=0.9",
                    "Origin": "https://www.nasdaq.com",
                    "Referer": "https://www.nasdaq.com",
@@ -393,7 +393,6 @@ class Ticker():
         nodes = [s_b,s_d]
 
         data = [self.year_tree_item(i, start, end, category = "EPS", quarter = True) for i in nodes]
-        print(no_columns)
 
         for i in range(len(data)):
             if no_columns == -1:
