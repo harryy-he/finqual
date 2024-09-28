@@ -1,5 +1,4 @@
 # Import packages
-import json
 import pandas as pd
 import numpy as np
 import requests
@@ -71,24 +70,14 @@ class Ticker():
         self.SIC = self.SIC()
 
     def CIK(self):
+        headers = {"Accept": "application/json, text/plain, */*",
+                   "Accept-Language": "en-US,en;q=0.9",
+                   "Origin": "https://www.nasdaq.com",
+                   "Referer": "https://www.nasdaq.com",
+                   "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36"}
 
-        try:
-            headers = {"Accept": "application/json, text/plain, */*",
-                       "Accept-Language": "en-US,en;q=0.9",
-                       "Origin": "https://www.nasdaq.com",
-                       "Referer": "https://www.nasdaq.com",
-                       "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36"}
-
-            source = requests.get(url="https://www.sec.gov/files/company_tickers.json", headers=headers, verify=True)
-            cik = source.json()
-
-        except:
-            this_dir, this_filename = os.path.split(__file__)
-            source = os.path.join(this_dir, "data", "company_tickers.json")
-
-            with open(source) as f:
-                cik = json.load(f)
-
+        source = requests.get(url="https://www.sec.gov/files/company_tickers.json", headers=headers, verify=True)
+        cik = source.json()
         cik = pd.DataFrame(cik)
         cik = cik.transpose()
 
@@ -144,7 +133,7 @@ class Ticker():
 
     def fiscal_year(self):
 
-        headers = {"Accept": "application/json, text/plain, */*", "Accept-Encoding": "gzip, deflate, br",
+        headers = {"Accept": "application/json, text/plain, */*",
                    "Accept-Language": "en-US,en;q=0.9",
                    "Origin": "https://www.nasdaq.com",
                    "Referer": "https://www.nasdaq.com",
@@ -169,23 +158,15 @@ class Ticker():
         Function to get a Pandas dataframe from the SEC API of a chosen ticker
         """
         # Defining the headers for access
-        headers = {"Accept": "application/json, text/plain, */*", "Accept-Encoding": "gzip, deflate, br",
+        headers = {"Accept": "application/json, text/plain, */*",
                    "Accept-Language": "en-US,en;q=0.9",
                    "Origin": "https://www.nasdaq.com",
                    "Referer": "https://www.nasdaq.com",
                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36"}
 
-        try:
-            source = requests.get(url="https://www.sec.gov/files/company_tickers.json", headers=headers, verify=True)
-            cik = source.json()
-
-        except:
-            this_dir, this_filename = os.path.split(__file__)
-            source = os.path.join(this_dir, "data", "company_tickers.json")
-
-            with open(source) as f:
-                cik = json.load(f)
-
+        # Getting the CIK number of chosen company
+        source = requests.get(url="https://www.sec.gov/files/company_tickers.json", headers=headers, verify=True)
+        cik = source.json()
         cik = pd.DataFrame(cik)
         cik = cik.transpose()
 
