@@ -71,15 +71,6 @@ class Ticker():
         self.SIC = self.SIC()
 
     def CIK(self):
-<<<<<<< HEAD
-=======
-        headers = {"Accept": "application/json, text/plain, */*",
-                   "Accept-Language": "en-US,en;q=0.9",
-                   "Origin": "https://www.nasdaq.com",
-                   "Referer": "https://www.nasdaq.com",
-                   "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36"}
->>>>>>> origin/main
-
         try:
             headers = {"Accept": "application/json, text/plain, */*",
                        "Accept-Language": "en-US,en;q=0.9",
