@@ -60,7 +60,29 @@ class Ticker():
             else:  # Handle wraparound from end of year to start of year
                 return (start_month, start_day) <= (date_month, date_day) or (date_month, date_day) <= (
                     end_month, end_day)
+    def earnings_dates(self):
+        """
+        :param ticker: Ticker
+        :return list: Returns a list of timestamp containing the earnings dates for the chosen ticker
+        """
+        cik = self.CIK()
+        url = "https://data.sec.gov/submissions/CIK" + cik + ".json"
 
+        headers = {"User-Agent": "YourName (your@email.com)", "Accept-Encoding": "gzip, deflate", "Host": "data.sec.gov"}
+
+        response = requests.get(url, headers=headers)
+
+        json_data = response.json()  # Parse JSON response
+        form_types = json_data["filings"]["recent"]["form"]
+        dates = json_data["filings"]["recent"]["filingDate"]
+
+        df_dates = pd.DataFrame({"Date": dates, "Form_Type": form_types})
+        df_dates = df_dates[df_dates["Form_Type"].isin(["10-Q", "10-K"])]
+        df_dates["Date"] = pd.to_datetime(df_dates["Date"])
+
+        df_dates = df_dates.reset_index(drop=True)
+
+        return df_dates
     def SIC(self):
         this_dir, this_filename = os.path.split(__file__)
         sic_path = os.path.join(this_dir, "data", "sec_sic.csv")
@@ -361,7 +383,7 @@ class Ticker():
         df.loc["Number of Diluted Shares"] = data[1]
         df.loc["Basic EPS"] = df.loc["Net Profit"]/df.loc["Number of Basic Shares"]
         df.loc["Diluted EPS"] = df.loc["Net Profit"]/df.loc["Number of Diluted Shares"]
-        df = df.round(1).map('{:.1f}'.format).replace('\.0$', '', regex=True) # Changed
+        df = df.round(1).map('{:.1f}'.format).replace(r'\.0$', '', regex=True)
         df.replace("inf", np.nan, inplace=True)
         return df
 
