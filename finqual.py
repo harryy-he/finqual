@@ -1,5 +1,4 @@
 # Import packages
-import json
 import pandas as pd
 import numpy as np
 import requests
@@ -206,7 +205,7 @@ class Ticker:
             except:
                 return False
 
-        if (category == "income"):
+        if category == "income":
             """
             Creating search term
             """
@@ -257,7 +256,7 @@ class Ticker:
             except:
                 return False
 
-            if (df.shape[1] == 8):
+            if df.shape[1] == 8:
                 try:
                     df.drop_duplicates(subset=["end", "val"], inplace=True,
                                        keep="last")
