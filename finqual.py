@@ -383,9 +383,7 @@ class Ticker():
                  cce5_2,
                  ide1_1]
         node_names = ["Revenues", "Cost of Revenue", "Gross Profit", "Operating Expenses", "Cost and Expenses",
-                      "Operating Profit"
-            ,"Non-Operating Income/Expense", "Pretax Profit", "Tax", "Net Profit", "Depreciation and Amortization"
-            ,"Interest Expense"]
+                      "Operating Profit","Non-Operating Income/Expense", "Pretax Profit", "Tax", "Net Profit", "Depreciation and Amortization","Interest Expense"]
         """
         Appending each node values for each year to a data
         """
