@@ -19,22 +19,28 @@ This has two key features that enable better programmatic access compared to oth
 
 This provides section provides a quick overview on the functions available within the finqual package.
 
+The core functionalities to retrieve financial statement information:
 ```
 from finqual import finqual as fq
 
-fq.Ticker("TSLA").income(2020,2022) #Get annual income statements from 2020 to 2022
-fq.Ticker("TSLA").income(2020,2022, quarter = True) #Get quarterly income statements from 2020 to 2022
+fq.Ticker("TSLA").income(2020,2022) # Get annual income statements from 2020 to 2022
 
-fq.Ticker("TSLA").balance(2020,2022) #Get annual balance sheets from 2020 to 2022
-fq.Ticker("TSLA").balance(2020,2022, quarter = True) #Get quarterly balance sheets from 2020 to 2022
+fq.Ticker("TSLA").balance(2020,2022) # Get annual balance sheets from 2020 to 2022
 
-fq.Ticker("TSLA").cashflow(2020,2022) #Get annual cash flow statements from 2020 to 2022
-fq.Ticker("TSLA").cashflow(2020,2022) #Get quarterly cash flow statements from 2020 to 2022
+fq.Ticker("TSLA").cashflow(2020,2022) # Get annual cash flow statements from 2020 to 2022
 
-fq.Ticker("TSLA").ratios(2018,2020) #Get selected financial ratios and the average from 2020 to 2022
+fq.Ticker("TSLA").income(2020,2022, quarter=True) # Get quarterly income statements by adding 'quarter=True'
+```
 
-fq.Ticker("TSLA").comparables(5) #Get five comparable companies for TSLA (by market cap) that are in the same 4 digit SIC industry classification
-fq.Ticker("TSLA").comparables(5,3) #Get five comparable companies for TSLA (by market cap) that are in the same 3 digit SIC industry classification
+Other functionalities include:
+
+```
+fq.Ticker("TSLA").ratios(2018,2020) # Get selected financial ratios and the average from 2020 to 2022
+
+fq.Ticker("TSLA").earnings_dates() # Get the historical earnings dates 
+
+fq.Ticker("TSLA").comparables(5) # Get five comparable companies for TSLA (by market cap) that are in the same 4 digit SIC industry classification
+
 ```
 
 ## In-depth guide
@@ -60,12 +66,16 @@ Other fundamental financial research functions
 """
 fq.Ticker("TSLA").ratios(start, end)
 
+fq.Ticker("TSLA").earnings_dates()
+
 fq.Ticker("TSLA").comparables(n, level = None)
 ```
 
 The financial statement functions (`income`, `balance` and `cashflow`) takes a mandatory timeframe input `start` and `end`, and then an optional input to return the quarterly results within that timeframe by setting `quarter = True`, otherwise defaulting to returning annual results.
 
-The `ratios` function calculates selected financial ratios for the specified timeframe and returns the mean average over that timeframe. The selected financial ratios are a selection of liquidity, profitability and valuation ratios, which are commonly used to compare against other companies,
+The `ratios` function calculates selected financial ratios for the specified timeframe and returns the mean average over that timeframe. The selected financial ratios are a selection of liquidity, profitability and valuation ratios, which are commonly used to compare against other companies.
+
+The `earnings_dates` function retrieves the earnings dates history for a given ticker.
 
 The `comparables` function returns a list of `n` comparable companies based on the SIC code of the initialized ticker (i.e. companies in the same industry as the chosen company). The comparable companies are selected based on market capitalisation, and users can adjust the optional input `level` to determine the number of SIC digits to consider, whereby level takes an integer from 1 to 4, with 4 being the default and the most granular industry classification possible within the package.
 
