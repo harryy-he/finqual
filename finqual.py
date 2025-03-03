@@ -131,24 +131,7 @@ class Ticker():
                    "Referer": "https://www.nasdaq.com",
                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36"}
 
-        try:
-            source = requests.get(url="https://www.sec.gov/files/company_tickers.json", headers=headers, verify=True)
-            cik = source.json()
-
-        except:
-            this_dir, this_filename = os.path.split(__file__)
-            source = os.path.join(this_dir, "data", "company_tickers.json")
-
-            with open(source) as f:
-                cik = json.load(f)
-
-        cik = pd.DataFrame(cik)
-        cik = cik.transpose()
-
-        value = str(cik.loc[cik["ticker"] == self.ticker]["cik_str"].iloc[0])
-
-        # Making sure the CIK is of right length
-        value = value.zfill(10)
+        value = self.CIK()
 
         url = 'https://data.sec.gov/api/xbrl/companyfacts/CIK' + value + '.json'
 
