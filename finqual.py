@@ -61,10 +61,7 @@ class Ticker():
                 return (start_month, start_day) <= (date_month, date_day) or (date_month, date_day) <= (
                     end_month, end_day)
     def earnings_dates(self):
-        """
-        :param ticker: Ticker
-        :return list: Returns a list of timestamp containing the earnings dates for the chosen ticker
-        """
+
         cik = self.CIK()
         url = "https://data.sec.gov/submissions/CIK" + cik + ".json"
 
@@ -252,7 +249,7 @@ class Ticker():
 
                 return False
 
-        if (category == "cashflow"):
+        if category == "cashflow":
             try:
                 df = pd.DataFrame((pd.DataFrame(data[item])["units"]).iloc[0])
             except:
