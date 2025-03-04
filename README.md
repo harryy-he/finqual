@@ -23,13 +23,13 @@ The core functionalities to retrieve financial statement information:
 ```
 from finqual import finqual as fq
 
-fq.Ticker("TSLA").income(2020,2022) # Get annual income statements from 2020 to 2022
+fq.Ticker("NVDA").income(2020,2022) # Get annual income statements from 2020 to 2022
 
-fq.Ticker("TSLA").balance(2020,2022) # Get annual balance sheets from 2020 to 2022
+fq.Ticker("NVDA").balance(2020,2022) # Get annual balance sheets from 2020 to 2022
 
-fq.Ticker("TSLA").cashflow(2020,2022) # Get annual cash flow statements from 2020 to 2022
+fq.Ticker("NVDA").cashflow(2020,2022) # Get annual cash flow statements from 2020 to 2022
 
-fq.Ticker("TSLA").income(2020,2022, quarter=True) # Get quarterly income statements by adding 'quarter=True'
+fq.Ticker("NVDA").income(2020,2022, quarter=True) # Get quarterly income statements by adding 'quarter=True'
 ```
 
 ![income.png](income.png)
@@ -37,15 +37,15 @@ fq.Ticker("TSLA").income(2020,2022, quarter=True) # Get quarterly income stateme
 Other functionalities include:
 
 ```
-fq.Ticker("TSLA").ratios(2018,2020) # Get selected financial ratios and the average from 2020 to 2022
+fq.Ticker("NVDA").ratios(2020,2022) # Get selected financial ratios and the average from 2020 to 2022
 ```
 ![ratios.png](ratios.png)
 ```
-fq.Ticker("TSLA").earnings_dates() # Get the historical earnings dates 
+fq.Ticker("NVDA").earnings_dates() # Get the historical earnings dates 
 ```
 ![earnings.png](earnings.png)
 ```
-fq.Ticker("TSLA").comparables(5) # Get five comparable companies for TSLA (by market cap) that are in the same 4 digit SIC industry classification
+fq.Ticker("NVDA").comparables(5) # Get five comparable companies for TSLA (by market cap) that are in the same 4 digit SIC industry classification
 ```
 ![comparables.png](comparables.png)
 
@@ -61,20 +61,20 @@ From there, we use this initalised "Ticker" instance to call the desired functio
 """
 Financial statement functions
 """
-fq.Ticker("TSLA").income(start, end, quarter)
+fq.Ticker("NVDA").income(start, end, quarter)
 
-fq.Ticker("TSLA").balance(start, end, quarter)
+fq.Ticker("NVDA").balance(start, end, quarter)
 
-fq.Ticker("TSLA").cashflow(start, end, quarter)
+fq.Ticker("NVDA").cashflow(start, end, quarter)
 
 """
 Other fundamental financial research functions
 """
-fq.Ticker("TSLA").ratios(start, end)
+fq.Ticker("NVDA").ratios(start, end)
 
-fq.Ticker("TSLA").earnings_dates()
+fq.Ticker("NVDA").earnings_dates()
 
-fq.Ticker("TSLA").comparables(n, level = None)
+fq.Ticker("NVDA").comparables(n, level = None)
 ```
 
 The financial statement functions (`income`, `balance` and `cashflow`) takes a mandatory timeframe input `start` and `end`, and then an optional input to return the quarterly results within that timeframe by setting `quarter = True`, otherwise defaulting to returning annual results.
