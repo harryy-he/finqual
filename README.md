@@ -32,16 +32,22 @@ fq.Ticker("TSLA").cashflow(2020,2022) # Get annual cash flow statements from 202
 fq.Ticker("TSLA").income(2020,2022, quarter=True) # Get quarterly income statements by adding 'quarter=True'
 ```
 
+![income.png](income.png)
+
 Other functionalities include:
 
 ```
 fq.Ticker("TSLA").ratios(2018,2020) # Get selected financial ratios and the average from 2020 to 2022
-
-fq.Ticker("TSLA").earnings_dates() # Get the historical earnings dates 
-
-fq.Ticker("TSLA").comparables(5) # Get five comparable companies for TSLA (by market cap) that are in the same 4 digit SIC industry classification
-
 ```
+![ratios.png](ratios.png)
+```
+fq.Ticker("TSLA").earnings_dates() # Get the historical earnings dates 
+```
+![earnings.png](earnings.png)
+```
+fq.Ticker("TSLA").comparables(5) # Get five comparable companies for TSLA (by market cap) that are in the same 4 digit SIC industry classification
+```
+![comparables.png](comparables.png)
 
 ## In-depth guide
 
