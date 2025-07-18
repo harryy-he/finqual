@@ -34,6 +34,8 @@ fq.Finqual("NVDA").income_stmt_period(2020, 2022) # Add '_period' to the end of 
 fq.Finqual("NVDA").cash_flow_period(2020, 2022, quarter = True) # Add 'quarter = True' to retrieve the quarterly information over that time period
 ```
 
+![nvda_2024_income_period.png](images%2Fnvda_2024_income_period.png)
+
 We can also retrieve selected financial ratios (sorted by type) for the chosen company:
 
 ```
@@ -47,6 +49,8 @@ fq.Finqual("NVDA").profitability_ratios_period(2020, 2024) # Similar to before, 
 fq.Finqual("NVDA").profitability_ratios_period(2020, 2024, quarter = True) # Add 'quarter = True' to retrieve the quarterly information over that time period
 ```
 
+![nvda_valuation_2024.png](images%2Fnvda_valuation_2024.png)
+
 We can also conduct comparable company analysis by using the CCA method, as shown below:
 
 ```
@@ -54,6 +58,8 @@ fq.CCA("NVDA").get_c() # Get comparable companies that are in the same sector an
 fq.CCA("NVDA").liquidity_ratios(2020) # Similar to before, but retrieve the liquidity ratios for NVIDIA and its competitors for FY2020
 fq.CCA("NVDA").valuation_ratios_period(2020, 2022) # Similar to before, but retrieve the valuation ratios for NVIDIA and its competitors for FY2020 to FY2022
 ```
+
+![nvda_cca_2024.png](images%2Fnvda_cca_2024.png)
 
 ## Dependencies
 
