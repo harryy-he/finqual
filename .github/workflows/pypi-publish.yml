@@ -2,8 +2,8 @@ name: Publish to PyPI
 
 on:
   push:
-    branches:
-      - main
+    tags:
+      - 'v*'  # Only publish when pushing a version tag like v1.0.0
 
 jobs:
   build-and-publish:
