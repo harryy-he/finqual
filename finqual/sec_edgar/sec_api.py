@@ -35,6 +35,8 @@ class SecApi:
                         }
 
         self.cik = self.get_cik_code()
+        self.sec_submissions = self.get_company_submissions()
+        self.sec_company_facts = self.get_company_facts()
         self.sec_data = self.get_sec_data()
         self.taxonomy = self.get_taxonomy()
 
@@ -71,7 +73,7 @@ class SecApi:
 
     @weak_lru(maxsize=10)
     def get_taxonomy(self):
-        json_request = self.get_company_facts()
+        json_request = self.sec_company_facts
 
         facts = json_request.get('facts', {})
 
@@ -86,7 +88,7 @@ class SecApi:
 
     @weak_lru(maxsize=10)
     def get_currency(self):
-        json_request = self.get_company_facts()
+        json_request = self.sec_company_facts
 
         facts = json_request.get('facts', {})
 
@@ -120,7 +122,7 @@ class SecApi:
 
     @weak_lru(maxsize=10)
     def get_sec_data(self):
-        json_request = self.get_company_facts()
+        json_request = self.sec_company_facts
 
         facts = json_request.get('facts', {})
 
@@ -158,7 +160,7 @@ class SecApi:
 
     @weak_lru(maxsize=10)
     def get_sector(self):
-        json_request = self.get_company_submissions()
+        json_request = self.sec_submissions
 
         sector = json_request['sicDescription']
 
@@ -166,7 +168,7 @@ class SecApi:
 
     @weak_lru(maxsize=10)
     def get_year_end(self):
-        json_request = self.get_company_submissions()
+        json_request = self.sec_submissions
 
         year_end = json_request['fiscalYearEnd']
         year_end = datetime.strptime(year_end, "%m%d")
@@ -176,7 +178,7 @@ class SecApi:
 
     @weak_lru(maxsize=10)
     def get_filings(self):
-        json_request = self.get_company_submissions()
+        json_request = self.sec_submissions
 
         df_filings = pl.DataFrame(json_request['filings']['recent'])
 
@@ -184,7 +186,7 @@ class SecApi:
 
     @weak_lru(maxsize=10)
     def get_dei(self):
-        json_request = self.get_company_facts()
+        json_request = self.sec_company_facts
 
         facts = json_request.get('facts', {})
         dei = facts.get('dei', {})
