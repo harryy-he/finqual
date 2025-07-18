@@ -341,9 +341,8 @@ class Finqual:
         df_income, log = triangulate_smart(df_income, rules)
 
         label = str(year) if quarter is None else str(year) + "Q" + str(quarter)
-        df_income = df_income.rename(columns={'value': label})
-        df_income = df_income.set_index('line_item')
-
+        df_income = df_income.rename(columns={'value': label, 'line_item': self.ticker})
+        df_income = df_income.set_index(self.ticker)
         df_income = df_income.drop(columns=['total_prob'])
 
         return df_income
@@ -383,8 +382,8 @@ class Finqual:
         df_bs, log = triangulate_smart(df_bs, rules)
 
         label = str(year) if quarter is None else str(year) + "Q" + str(quarter)
-        df_bs = df_bs.rename(columns={'value': label})
-        df_bs = df_bs.set_index('line_item')
+        df_bs = df_bs.rename(columns={'value': label, 'line_item': self.ticker})
+        df_bs = df_bs.set_index(self.ticker)
 
         try:
             df_bs.loc['Shares Outstanding'] = [self.sec_edgar.get_shares(year, quarter), 1]
@@ -424,8 +423,8 @@ class Finqual:
 
         df_cf, log = triangulate_smart(df_cf, rules)
         label = str(year) if quarter is None else str(year) + "Q" + str(quarter)
-        df_cf = df_cf.rename(columns={'value': label})
-        df_cf = df_cf.set_index('line_item')
+        df_cf = df_cf.rename(columns={'value': label, 'line_item': self.ticker})
+        df_cf = df_cf.set_index(self.ticker)
         df_cf = df_cf.drop(columns=['total_prob'])
 
         return df_cf
