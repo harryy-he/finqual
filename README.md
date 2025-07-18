@@ -71,6 +71,7 @@ Only four external packages are required, with the following versions confirmed 
 | polars       | >= 1.21.0 |
 | cloudscraper | >= 1.2.71 |
 | requests     | >= 2.32.3 |
+| ratelimit    | >= 2.2.1  |
 
 The rest are in-built Python packages such as json, functools and concurrent.futures.
 
