@@ -20,5 +20,6 @@ setup(
     install_requires=["pandas>=2.2.3",
                       "polars>=1.21.0",
                       "cloudscraper>=1.2.71",
-                      "requests>=2.32.3"]
+                      "requests==2.32.4",
+                      "ratelimit>=2.2.1",]
 )
