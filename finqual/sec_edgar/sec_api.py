@@ -3,6 +3,8 @@ import polars as pl
 from datetime import datetime
 import functools
 import weakref
+from ratelimit import limits
+
 def weak_lru(maxsize=128, typed=False):
     """LRU Cache decorator that keeps a weak reference to 'self'"""
     def wrapper(func):
@@ -33,8 +35,26 @@ class SecApi:
                         }
 
         self.cik = self.get_cik_code()
-        self.sec_data = self.get_company_facts()
+        self.sec_data = self.get_sec_data()
         self.taxonomy = self.get_taxonomy()
+
+    @weak_lru(maxsize=10)
+    @limits(calls=10, period=1)
+    def get_company_facts(self):
+        url = 'https://data.sec.gov/api/xbrl/companyfacts/CIK' + self.cik + '.json'
+        response = requests.get(url, headers=self.headers)
+        json_request = response.json()
+
+        return json_request
+
+    @weak_lru(maxsize=10)
+    @limits(calls=10, period=1)
+    def get_company_submissions(self):
+        url = 'https://data.sec.gov/submissions/CIK' + self.cik + '.json'
+        response = requests.get(url, headers=self.headers)
+        json_request = response.json()
+
+        return json_request
 
     @weak_lru(maxsize=10)
     def get_cik_code(self):
@@ -51,10 +71,7 @@ class SecApi:
 
     @weak_lru(maxsize=10)
     def get_taxonomy(self):
-        url = 'https://data.sec.gov/api/xbrl/companyfacts/CIK' + self.cik + '.json'
-        response = requests.get(url, headers=self.headers)
-
-        json_request = response.json()
+        json_request = self.get_company_facts()
 
         facts = json_request.get('facts', {})
 
@@ -69,11 +86,7 @@ class SecApi:
 
     @weak_lru(maxsize=10)
     def get_currency(self):
-
-        url = 'https://data.sec.gov/api/xbrl/companyfacts/CIK' + self.cik + '.json'
-        response = requests.get(url, headers=self.headers)
-
-        json_request = response.json()
+        json_request = self.get_company_facts()
 
         facts = json_request.get('facts', {})
 
@@ -106,12 +119,8 @@ class SecApi:
         return preferred_currency
 
     @weak_lru(maxsize=10)
-    def get_company_facts(self):
-
-        url = 'https://data.sec.gov/api/xbrl/companyfacts/CIK' + self.cik + '.json'
-        response = requests.get(url, headers=self.headers)
-
-        json_request = response.json()
+    def get_sec_data(self):
+        json_request = self.get_company_facts()
 
         facts = json_request.get('facts', {})
 
@@ -149,10 +158,7 @@ class SecApi:
 
     @weak_lru(maxsize=10)
     def get_sector(self):
-        url = 'https://data.sec.gov/submissions/CIK' + self.cik + '.json'
-        response = requests.get(url, headers=self.headers)
-
-        json_request = response.json()
+        json_request = self.get_company_submissions()
 
         sector = json_request['sicDescription']
 
@@ -160,11 +166,7 @@ class SecApi:
 
     @weak_lru(maxsize=10)
     def get_year_end(self):
-
-        url = 'https://data.sec.gov/submissions/CIK' + self.cik + '.json'
-        response = requests.get(url, headers=self.headers)
-
-        json_request = response.json()
+        json_request = self.get_company_submissions()
 
         year_end = json_request['fiscalYearEnd']
         year_end = datetime.strptime(year_end, "%m%d")
@@ -174,10 +176,7 @@ class SecApi:
 
     @weak_lru(maxsize=10)
     def get_filings(self):
-        url = 'https://data.sec.gov/submissions/CIK' + self.cik + '.json'
-        response = requests.get(url, headers=self.headers)
-
-        json_request = response.json()
+        json_request = self.get_company_submissions()
 
         df_filings = pl.DataFrame(json_request['filings']['recent'])
 
@@ -185,11 +184,7 @@ class SecApi:
 
     @weak_lru(maxsize=10)
     def get_dei(self):
-
-        url = 'https://data.sec.gov/api/xbrl/companyfacts/CIK' + self.cik + '.json'
-        response = requests.get(url, headers=self.headers)
-
-        json_request = response.json()
+        json_request = self.get_company_facts()
 
         facts = json_request.get('facts', {})
         dei = facts.get('dei', {})
