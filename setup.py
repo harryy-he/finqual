@@ -21,5 +21,8 @@ setup(
                       "polars>=1.21.0",
                       "cloudscraper>=1.2.71",
                       "requests==2.32.4",
-                      "ratelimit>=2.2.1",]
+                      "ratelimit>=2.2.1",
+                      "matplotlib>=3.8.0",
+                      "pyarrow>=12.0.0",
+                      ]
 )
