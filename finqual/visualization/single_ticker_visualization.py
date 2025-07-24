@@ -29,11 +29,14 @@ def plot_profitability_ratios(
         print("[SKIP] No numeric data to plot.")
         return
 
-    # Determine the x-axis
+    # Determine and sort x-axis
+    # "Period" exists for quarterly or multi-year queries; fall back to range if missing
     if "Period" in df.columns:
         df_plot.index = df["Period"]
     else:
         df_plot.index = range(start_year, end_year + 1)
+
+    df_plot = df_plot.sort_index()
 
     # Plot
     df_plot.plot(
@@ -49,9 +52,4 @@ def plot_profitability_ratios(
 
 
 # Example usage
-# plot_profitability_ratios(
-#     ticker="AAPL",
-#     start_year=2018,
-#     end_year=2022,
-#     quarterly=True
-# )
+plot_profitability_ratios(ticker="AAPL", start_year=2018, end_year=2022, quarterly=True)
