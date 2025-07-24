@@ -52,4 +52,4 @@ def plot_profitability_ratios(
 
 
 # Example usage
-plot_profitability_ratios(ticker="AAPL", start_year=2018, end_year=2022, quarterly=True)
+# plot_profitability_ratios(ticker="AAPL", start_year=2018, end_year=2022, quarterly=True)
