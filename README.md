@@ -5,12 +5,13 @@ This is a work in progress package that enables users to conduct fundamental fin
 ## Features
 
 finqual has the following features:
- 
+
 - Ability to call the income statement, balance sheet or cash flow statement for any company on SEC's EDGAR system
 - Breakdown of chosen financial ratios for a chosen ticker
 - Conduct comparable company analysis by comparing valuation, liquidity and profitability metrics
 
 This has four key features that enable better programmatic access compared to other providers:
+
 - Ability to call up to 10 requests per second, with built-in rate limiter
 - No restriction on the number of calls within a certain timeframe
 - Standardised labels for easy analysis between companies
@@ -21,6 +22,7 @@ This has four key features that enable better programmatic access compared to ot
 This provides section provides a quick overview on the functions available within the finqual package.
 
 The core functionalities to retrieve financial statement information:
+
 ```
 from finqual import finqual as fq
 
@@ -40,7 +42,7 @@ We can also retrieve selected financial ratios (sorted by type) for the chosen c
 
 ```
 fq.Finqual("NVDA").profitability_ratios(2020) # Get selected profitability ratios for FY2020 (e.g. Operating Margin, Gross Margin, ROE, ROA, ROIC etc)
-fq.Finqual("NVDA").liquidity_ratios(2020) # Get selected liquidity ratios for FY2020 (e.g. D/E, Current, Quick Ratio) 
+fq.Finqual("NVDA").liquidity_ratios(2020) # Get selected liquidity ratios for FY2020 (e.g. D/E, Current, Quick Ratio)
 fq.Finqual("NVDA").valuation_ratios(2020) # Get selected valuation ratios for FY2020 (e.g. P/E, EV/EBITDA, EPS etc)
 
 # ---
@@ -66,16 +68,19 @@ fq.CCA("NVDA").valuation_ratios_period(2020, 2022) # Similar to before, but retr
 Only four external packages are required, with the following versions confirmed to be working:
 
 | Package      | Version   |
-|--------------|-----------|
+| ------------ | --------- |
 | pandas       | >= 2.2.3  |
 | polars       | >= 1.21.0 |
 | cloudscraper | >= 1.2.71 |
 | requests     | >= 2.32.3 |
 | ratelimit    | >= 2.2.1  |
+| matplotlib   | >= 3.8.0  |
+| pyarrow      | >= 12.0.0 |
 
 The rest are in-built Python packages such as json, functools and concurrent.futures.
 
 ## Limitations
+
 Currently, there are several known limitations that I am aware of from my own testing. These are still to be looked at:
 
 - Some missing data values for companies, this is mostly due to companies using custom tags that are not accessible via the SEC database (e.g. Broadcom uses their own tag for depreciation and amortisation)
