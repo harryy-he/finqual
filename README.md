@@ -88,3 +88,7 @@ Currently, there are several known limitations that I am aware of from my own te
 
 - Some missing data values for companies, this is mostly due to companies using custom tags that are not accessible via the SEC database (e.g. Broadcom uses their own tag for depreciation and amortisation)
 - Banks, insurers and other financial institutions have a different financial statement profile that has not been mapped yet
+
+## Contact
+
+If you would like to help me out, collaborate or for any other enquiries, please feel free to [email me](mailto:harryhe99@outlook.com).
