@@ -1,6 +1,6 @@
-# finqual
-
 [![Star History Chart](https://api.star-history.com/svg?repos=harryy-he/finqual&type=Date)](https://www.star-history.com/#harryy-he/finqual&Date)
+
+# finqual
 
 This is a work in progress package that enables users to conduct fundamental financial research, utilising the SEC's data and REST API.
 
