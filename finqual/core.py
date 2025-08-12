@@ -246,7 +246,7 @@ class Finqual:
             df_annual_quarter.loc[4, "value"] = quarterly_results[0].loc[5, "value"]  # Set Beginning Cash to last quarter End Cash
             df_annual_quarter.loc[5, "value"] = fy_result.loc[5, "value"].round(0)  # Set End Cash to FY End Cash
 
-        df_annual_quarter['value'] = df_annual_quarter['value'].astype(int)
+        df_annual_quarter['value'] = df_annual_quarter['value'].apply(lambda x: int(x))
 
         return df_annual_quarter
 

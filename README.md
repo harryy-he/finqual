@@ -1,5 +1,7 @@
 # finqual
 
+[![Star History Chart](https://api.star-history.com/svg?repos=harryy-he/finqual&type=Date)](https://www.star-history.com/#harryy-he/finqual&Date)
+
 This is a work in progress package that enables users to conduct fundamental financial research, utilising the SEC's data and REST API.
 
 ## Installation
@@ -27,16 +29,16 @@ This provides section provides a quick overview on the functions available withi
 
 The core functionalities to retrieve financial statement information:
 ```
-from finqual import Finqual
+import finqual as fq
 
-Finqual("NVDA").income_stmt(2023) # Get annual income statements for FY2023
-Finqual("NVDA").balance_sheet(2023, 3) # Get quarterly balance sheet for FY2023 Q3
-Finqual("NVDA").cash_flow(2020) # Get annual cash flow statements for FY2020
+fq.Finqual("NVDA").income_stmt(2023) # Get annual income statements for FY2023
+fq.Finqual("NVDA").balance_sheet(2023, 3) # Get quarterly balance sheet for FY2023 Q3
+fq.Finqual("NVDA").cash_flow(2020) # Get annual cash flow statements for FY2020
 
 # ---
 
-Finqual("NVDA").income_stmt_period(2020, 2022) # Add '_period' to the end of the function and define the start and end to retrieve the income statement over the period
-Finqual("NVDA").cash_flow_period(2020, 2022, quarter = True) # Add 'quarter = True' to retrieve the quarterly information over that time period
+fq.Finqual("NVDA").income_stmt_period(2020, 2022) # Add '_period' to the end of the function and define the start and end to retrieve the income statement over the period
+fq.Finqual("NVDA").cash_flow_period(2020, 2022, quarter = True) # Add 'quarter = True' to retrieve the quarterly information over that time period
 ```
 
 ![nvda_2024_income_period.png](images%2Fnvda_2024_income_period.png)
@@ -44,14 +46,14 @@ Finqual("NVDA").cash_flow_period(2020, 2022, quarter = True) # Add 'quarter = Tr
 We can also retrieve selected financial ratios (sorted by type) for the chosen company:
 
 ```
-Finqual("NVDA").profitability_ratios(2020) # Get selected profitability ratios for FY2020 (e.g. Operating Margin, Gross Margin, ROE, ROA, ROIC etc)
-Finqual("NVDA").liquidity_ratios(2020) # Get selected liquidity ratios for FY2020 (e.g. D/E, Current, Quick Ratio) 
-Finqual("NVDA").valuation_ratios(2020) # Get selected valuation ratios for FY2020 (e.g. P/E, EV/EBITDA, EPS etc)
+fq.Finqual("NVDA").profitability_ratios(2020) # Get selected profitability ratios for FY2020 (e.g. Operating Margin, Gross Margin, ROE, ROA, ROIC etc)
+fq.Finqual("NVDA").liquidity_ratios(2020) # Get selected liquidity ratios for FY2020 (e.g. D/E, Current, Quick Ratio) 
+fq.Finqual("NVDA").valuation_ratios(2020) # Get selected valuation ratios for FY2020 (e.g. P/E, EV/EBITDA, EPS etc)
 
 # ---
 
-Finqual("NVDA").profitability_ratios_period(2020, 2024) # Similar to before, add "_period" to the end of the function and define a period to retrieve the ratio over that period
-Finqual("NVDA").profitability_ratios_period(2020, 2024, quarter = True) # Add 'quarter = True' to retrieve the quarterly information over that time period
+fq.Finqual("NVDA").profitability_ratios_period(2020, 2024) # Similar to before, add "_period" to the end of the function and define a period to retrieve the ratio over that period
+fq.Finqual("NVDA").profitability_ratios_period(2020, 2024, quarter = True) # Add 'quarter = True' to retrieve the quarterly information over that time period
 ```
 
 ![nvda_valuation_2024.png](images%2Fnvda_valuation_2024.png)
