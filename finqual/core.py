@@ -3,6 +3,7 @@ from .node_classes.node import Node
 from .sec_edgar.sec_api import SecApi
 from .stocktwit import StockTwit
 
+from datetime import datetime
 import functools
 from importlib.resources import files
 import json
@@ -122,7 +123,7 @@ def triangulate_smart(df: pd.DataFrame, rules) -> (pl.DataFrame, list):
                 if key in prefer and vars_[i] not in updated:
                     probs[i] = 0.0  # Ensure this becomes the target
 
-            low_conf_indices = [i for i, p in enumerate(probs) if p < 1.0 and vars_[i] not in updated]
+            low_conf_indices = [i for i, p in enumerate(probs) if p < 3.0 and vars_[i] not in updated]
 
             if len(low_conf_indices) == 1:
                 i = low_conf_indices[0]
@@ -306,9 +307,10 @@ class Finqual:
             return df_total.to_pandas()
 
         else:
-            print(f"*** Finqual: There is no data available for ticker {self.ticker} - it may be too newly listed or in the future.")
+            print(f"*** Finqual: There is no data available for ticker {self.ticker} for year {year} and/or quarter {quarter} - it may be too newly listed or in the future. \n")
             df_target = pl.DataFrame({"line_item": target_yf_list})
             df_target = df_target.with_columns(pl.lit(0).alias("value"))
+            df_target = df_target.with_columns(pl.lit(0).alias("total_prob"))
 
             return df_target.to_pandas()
 
@@ -337,6 +339,23 @@ class Finqual:
             period_type=tuple(["duration"]),
             target_yf_list=tuple(income_list),
         )
+
+        # ---
+
+        df_income["total_prob"] = df_income["total_prob"].astype(float)
+
+        increments = {
+            "Total Revenue": 0.5,
+            "Gross Profit": 0.5,
+            "Operating Income": 0.5,
+            "Pretax Income": 0.5,
+            "Net Income": 0.5
+        }
+
+        for item, inc in increments.items():
+            df_income.loc[df_income["line_item"] == item, "total_prob"] += inc
+
+        # ---
 
         df_income, log = triangulate_smart(df_income, rules)
 
@@ -482,10 +501,56 @@ class Finqual:
         return self._financials_period('income_stmt', start_year, end_year, 'statement', quarter)
 
     def balance_sheet_period(self, start_year: int, end_year: int, quarter: bool = False):
-        return self._financials_period('balance_sheet', start_year, end_year, 'statement', quarter)
+
+        df_bs = self._financials_period('balance_sheet', start_year, end_year, 'statement', quarter)
+        cols_to_drop = [col for col in df_bs.columns if (df_bs.drop(index="Shares Outstanding")[col] == 0).all()]
+        df_bs = df_bs.drop(columns=cols_to_drop)
+
+        return df_bs
 
     def cash_flow_period(self, start_year: int, end_year: int, quarter: bool = False):
         return self._financials_period('cash_flow', start_year, end_year, 'statement', quarter)
+
+    def income_stmt_ttm(self):
+        current_year = int(datetime.now().year)
+        df_inc = self.income_stmt_period(current_year - 2, current_year + 1, True)
+
+        if len(df_inc.columns) < 4:
+            print("Not enough data to calculate TTM")
+
+        df_ttm = df_inc[df_inc.columns[:4]].sum(axis=1)
+        return df_ttm
+
+    def balance_sheet_ttm(self):
+        current_year = int(datetime.now().year)
+        df_bs = self.balance_sheet_period(current_year - 1, current_year + 1, True)
+
+        if len(df_bs.columns) < 1:
+            print("Not enough data to calculate latest")
+
+        df_ttm = df_bs[df_bs.columns[:1]]
+        return df_ttm
+
+    def cash_flow_ttm(self):
+        current_year = int(datetime.now().year)
+        df_cf = self.cash_flow_period(current_year - 2, current_year + 1, True)
+
+        if len(df_cf.columns) <= 4:
+            print("Not enough data to calculate latest")
+
+        df_ttm = df_cf[df_cf.columns[:4]].copy()
+
+        # ---
+
+        df_ttm["TTM"] = df_ttm.iloc[:4,:].sum(axis=1)
+
+        df_ttm.loc["Beginning Cash Position", "TTM"] = df_cf.iloc[4, 3]
+        df_ttm.loc["End Cash Position", "TTM"] = df_cf.iloc[5, 0]
+        df_ttm.loc["Changes In Cash", "TTM"] = df_cf.iloc[5, 0] - df_cf.iloc[4, 3]
+
+        return df_ttm["TTM"]
+
+    # ----
 
     def _get_ratios(self, year: int, ratio_definitions: dict, statement_fetchers: dict, quarter: int | None = None, pct_flag: bool = False):
 

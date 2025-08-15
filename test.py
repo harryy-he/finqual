@@ -5,6 +5,11 @@ start = 2020
 end = 2023
 quarter = 3  # For quarterly data
 
+fq.Finqual("NVDA").income_stmt_ttm()
+fq.Finqual("NVDA").balance_sheet_ttm()
+fq.Finqual("NVDA").cash_flow_ttm()
+
+"""
 for ticker in tickers:
 
     # Financial Statements
@@ -43,3 +48,4 @@ for ticker in tickers:
     print(f"Comparable Companies:\n{df_cca}\n")
     print(f"Competitors Liquidity Ratios:\n{df_cc_l}\n")
     print(f"Competitors Valuation Ratios {start}-{end}:\n{df_cc_v}\n")
+"""
