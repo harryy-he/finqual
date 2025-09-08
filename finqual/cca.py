@@ -50,9 +50,9 @@ class CCA:
 
         print("No comparable companies found.")
 
-    def _get_ratios(self, year: int, method_name: str, quarter: int | None = None):
+    def _get_ratios(self, year: int | None, method_name: str, quarter: int | None = None):
 
-        def fetch_ratios(ticker: str, year_f: int, method_name_f: str, quarter_f: int | None):
+        def fetch_ratios(ticker: str, year_f: int | None, method_name_f: str, quarter_f: int | None):
             fq_instance = Finqual(ticker)
             func = getattr(fq_instance, method_name_f)
             return func(year_f, quarter_f)
@@ -103,7 +103,7 @@ class CCA:
         return self._get_ratios(year, 'liquidity_ratios', quarter)
 
     @weak_lru(maxsize=10)
-    def valuation_ratios(self, year: int, quarter: int | None = None):
+    def valuation_ratios(self, year: int | None = None, quarter: int | None = None):
         return self._get_ratios(year, 'valuation_ratios', quarter)
 
     @weak_lru(maxsize=10)

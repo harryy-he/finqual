@@ -7,6 +7,7 @@ from datetime import datetime
 import functools
 from importlib.resources import files
 import json
+import numpy as np
 import pandas as pd
 import polars as pl
 import re
@@ -274,6 +275,7 @@ class Finqual:
                 tree.get_all_values()
                 df_tree = tree.to_df()
                 if df_tree is not None:
+                    df_tree = df_tree.with_columns(pl.col("balance").cast(pl.Utf8))
                     all_dfs.append(df_tree)
 
             df_total = pl.concat(all_dfs, how="vertical") if all_dfs else pl.DataFrame()
@@ -449,7 +451,16 @@ class Finqual:
         return df_cf
 
     def _financials_period(self, method_name: str, start_year: int, end_year: int, append_type: str, quarter: bool = False):
+        """
+        General method to retrieve financial statements or ratios over a given period
 
+        :param method_name: Method name within Finqual to call
+        :param start_year: Start of period
+        :param end_year: End of period
+        :param append_type: Tells the method whether it is a 'statement' or 'ratios' to look for
+        :param quarter: Returns quarterly info
+        :return:
+        """
         func = getattr(self, method_name)
 
         years_period = [i for i in range(end_year, start_year - 1, -1)]
@@ -518,7 +529,7 @@ class Finqual:
         if len(df_inc.columns) < 4:
             print("Not enough data to calculate TTM")
 
-        df_ttm = df_inc[df_inc.columns[:4]].sum(axis=1)
+        df_ttm = pd.DataFrame(df_inc[df_inc.columns[:4]].sum(axis=1), columns = ["TTM"])
         return df_ttm
 
     def balance_sheet_ttm(self):
@@ -528,7 +539,8 @@ class Finqual:
         if len(df_bs.columns) < 1:
             print("Not enough data to calculate latest")
 
-        df_ttm = df_bs[df_bs.columns[:1]]
+        df_ttm = pd.DataFrame(df_bs[df_bs.columns[:1]].sum(axis=1), columns = ["TTM"])
+
         return df_ttm
 
     def cash_flow_ttm(self):
@@ -548,18 +560,33 @@ class Finqual:
         df_ttm.loc["End Cash Position", "TTM"] = df_cf.iloc[5, 0]
         df_ttm.loc["Changes In Cash", "TTM"] = df_cf.iloc[5, 0] - df_cf.iloc[4, 3]
 
-        return df_ttm["TTM"]
+        df_ttm = pd.DataFrame(df_ttm["TTM"], columns=["TTM"])
+
+        return df_ttm
 
     # ----
 
-    def _get_ratios(self, year: int, ratio_definitions: dict, statement_fetchers: dict, quarter: int | None = None, pct_flag: bool = False):
+    def _get_ratios(self, year: int|None, ratio_definitions: dict, statement_fetchers: dict, quarter: int | None = None, pct_flag: bool = False):
+        """
+        Method that takes in a dictionary with definitions of ratios and a dictionary of statements to retrieve (i.e. income, balance or cashflow)
 
+        :param year: The year of info to retrieve from
+        :param ratio_definitions: Dictionary of ratio definitions/formula
+        :param statement_fetchers: Dictionary of statements to retrieve (i.e. income, balance, cashflow)
+        :param quarter: The specific quarter to look at
+        :param pct_flag: True/False for whether the ratio is expressed in terms of percentages
+        :return:
+        """
         if pct_flag:
             ratio_multiplier = 100
         else:
             ratio_multiplier = 1
 
-        label = str(year) + "Q" + str(quarter) if quarter is not None else str(year)
+        if year is None and quarter is None:
+            label = "TTM"
+
+        else:
+            label = str(year) + "Q" + str(quarter) if quarter is not None else str(year)
 
         try:
             statement_data = {}
@@ -578,6 +605,7 @@ class Finqual:
                 except (ZeroDivisionError, TypeError):
                     result[ratio] = "Not Found"
             return result
+
         except KeyError:
             print(f"No data for {self.ticker} found.")
             result = {'Ticker': self.ticker, 'Period': label}
@@ -624,21 +652,41 @@ class Finqual:
 
         return df_ratio
 
-    def valuation_ratios(self, year: int, quarter: int | None = None):
+    def valuation_ratios(self, year: int|None = None, quarter: int | None = None):
+        """
+        Retrieve valuation for a given time period - only works for latest time.
 
-        share_price = StockTwit(self.ticker).retrieve_data()[self.ticker]
+        :param year: Year of interest
+        :param quarter: Quarter of interest
+        :return:
+        """
+        if year is None and quarter is None:
+
+            share_price = StockTwit(self.ticker).retrieve_data()[self.ticker]  # This would have to be the share price at the given year and quarter time
+
+            statement_fetchers = {
+                'income': lambda y, q=None: self.income_stmt_ttm(),
+                'balance': lambda y, q=None: self.balance_sheet_ttm(),
+                'cashflow': lambda y, q=None: self.cash_flow_ttm(),
+            }
+
+        else:
+
+            print("***Finqual: Note that functionality for historical valuation ratios not implemented.")
+
+            share_price = np.nan  # Placeholder code - need to add the share price at the requested year and quarter
+
+            statement_fetchers = {
+            'income': lambda y, q=None: self.income_stmt(y, q) if q else self.income_stmt(y),
+            'balance': lambda y, q=None: self.balance_sheet(y, q) if q else self.balance_sheet(y),
+            'cashflow': lambda y, q=None: self.cash_flow(y, q) if q else self.cash_flow(y),
+            }
 
         ratio_definitions = {
             'EPS': lambda data: data['income'].get('Net Income') / data['balance'].get('Shares Outstanding'),
             'P/E': lambda data: share_price / (data['income'].get('Net Income') / data['balance'].get('Shares Outstanding')),
             'P/B': lambda data: (share_price * data['balance'].get('Shares Outstanding')) / (data['balance'].get('Total Assets') - data['balance'].get('Total Liabilities Net Minority Interest')),
             'EV/EBITDA': lambda data: (data['balance'].get('Shares Outstanding') * share_price + data['cashflow'].get('End Cash Position')) / (data['income'].get('Operating Income') + data['cashflow'].get('Depreciation And Amortization')),
-        }
-
-        statement_fetchers = {
-            'income': lambda y, q=None: self.income_stmt(y, q) if q else self.income_stmt(y),
-            'balance': lambda y, q=None: self.balance_sheet(y, q) if q else self.balance_sheet(y),
-            'cashflow': lambda y, q=None: self.cash_flow(y, q) if q else self.cash_flow(y),
         }
 
         ratios = self._get_ratios(year, ratio_definitions, statement_fetchers, quarter, False)
