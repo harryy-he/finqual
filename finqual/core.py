@@ -540,6 +540,9 @@ class Finqual:
 
         if len(df_inc.columns) < 4:
             print("Not enough data to calculate TTM")
+            df_ttm = pd.DataFrame(df_inc[df_inc.columns[:4]].sum(axis=1), columns = ["TTM"])
+            df_ttm["TTM"] = "Not Found"
+            return df_ttm
 
         df_ttm = pd.DataFrame(df_inc[df_inc.columns[:4]].sum(axis=1), columns = ["TTM"])
         return df_ttm
@@ -549,7 +552,10 @@ class Finqual:
         df_bs = self.balance_sheet_period(current_year - 1, current_year + 1, True)
 
         if len(df_bs.columns) < 1:
-            print("Not enough data to calculate latest")
+            print("Not enough data to calculate latest balance sheet.")
+            df_ttm = pd.DataFrame(df_bs[df_bs.columns[:1]].sum(axis=1), columns = ["TTM"])
+            df_ttm["TTM"] = "Not Found"
+            return df_ttm
 
         df_ttm = pd.DataFrame(df_bs[df_bs.columns[:1]].sum(axis=1), columns = ["TTM"])
 
@@ -560,7 +566,10 @@ class Finqual:
         df_cf = self.cash_flow_period(current_year - 2, current_year + 1, True)
 
         if len(df_cf.columns) <= 4:
-            print("Not enough data to calculate latest")
+            print("Not enough data to calculate latest TTM for cashflow.")
+            df_ttm = pd.DataFrame(df_cf[df_cf.columns[:4]].sum(axis=1), columns = ["TTM"])
+            df_ttm["TTM"] = "Not Found"
+            return df_ttm
 
         df_ttm = df_cf[df_cf.columns[:4]].copy()
 
@@ -573,6 +582,7 @@ class Finqual:
         df_ttm.loc["Changes In Cash", "TTM"] = df_cf.iloc[5, 0] - df_cf.iloc[4, 3]
 
         df_ttm = pd.DataFrame(df_ttm["TTM"], columns=["TTM"])
+
 
         return df_ttm
 
