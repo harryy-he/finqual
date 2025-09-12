@@ -3,6 +3,7 @@ from .node_classes.node import Node
 from .sec_edgar.sec_api import SecApi
 from .stocktwit import StockTwit
 
+import copy
 from datetime import datetime
 import functools
 from importlib.resources import files
@@ -270,10 +271,13 @@ class Finqual:
 
             all_dfs = []
             for nodes in self.trees.values():
-                tree = NodeTree(nodes)
+                nodes_copy = copy.deepcopy(nodes)  # make a thread-safe copy
+                tree = NodeTree(nodes_copy)
+
                 tree.load_sec_data(sec_data_dict)
                 tree.get_all_values()
                 df_tree = tree.to_df()
+
                 if df_tree is not None:
                     df_tree = df_tree.with_columns(pl.col("balance").cast(pl.Utf8))
                     all_dfs.append(df_tree)
@@ -290,7 +294,7 @@ class Finqual:
 
             df_total = df_total.select(['yf', 'prob', 'value'])
             df_total = (df_total.group_by(['yf', 'value']).agg(pl.col('prob').sum().alias('total_prob')).sort('total_prob', descending=True))
-            df_total = (df_total.sort(['yf', 'total_prob'], descending=[False, True]).unique(subset='yf', keep='first'))
+            df_total = (df_total.sort(['yf', 'total_prob', 'value'], descending=[False, True, False]).unique(subset='yf', keep='first'))
             df_total = df_total.filter(pl.col('total_prob') >= tolerance)
 
             # ---
@@ -309,7 +313,7 @@ class Finqual:
             return df_total.to_pandas()
 
         else:
-            print(f"*** Finqual: There is no data available for ticker {self.ticker} for year {year} and/or quarter {quarter} - it may be too newly listed or in the future. \n")
+            #print(f"*** Finqual: There is no data available for ticker {self.ticker} for year {year} and/or quarter {quarter} - it may be too newly listed or in the future. \n")
             df_target = pl.DataFrame({"line_item": target_yf_list})
             df_target = df_target.with_columns(pl.lit(0).alias("value"))
             df_target = df_target.with_columns(pl.lit(0).alias("total_prob"))
@@ -480,6 +484,14 @@ class Finqual:
                 df = future.result()
                 results[label] = df
 
+        # # - This is sequential and confirmed to work
+        # for y in years_period:
+        #     if not quarter:
+        #         results[f"{y}"] = func(y)
+        #     else:
+        #         for q in [4, 3, 2, 1]:
+        #             results[f"{y}Q{q}"] = func(y, q)
+
         if append_type == 'statement':
 
             if quarter:
@@ -488,8 +500,8 @@ class Finqual:
                 ordered_labels = [f"{y}" for y in years_period]
 
             # Ordering and formatting the result
-            ordered_dfs = [results[label] for label in ordered_labels if label in results]
-            df_total = pd.concat(ordered_dfs, axis=1)
+            ordered_results = [results[label] for label in ordered_labels]
+            df_total = pd.concat(ordered_results, axis=1)
 
             df_total = df_total.loc[:, (df_total != 0).any(axis=0)]
             df_total = df_total[[label for label in ordered_labels if label in df_total.columns]]
@@ -672,7 +684,7 @@ class Finqual:
 
         else:
 
-            print("***Finqual: Note that functionality for historical valuation ratios not implemented.")
+            print("*** Finqual: Note that functionality for historical valuation ratios not implemented.")
 
             share_price = np.nan  # Placeholder code - need to add the share price at the requested year and quarter
 

@@ -221,7 +221,7 @@ class SecApi:
             return shares
 
         except (IndexError, KeyError):
-            print(f"*** SecApi: No outstanding share data found for {self.ticker}, returning None.")
+            # print(f"*** SecApi: No outstanding share data found for {self.ticker}, returning None.")
             return None
 
     @weak_lru(maxsize=10)

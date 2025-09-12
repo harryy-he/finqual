@@ -45,4 +45,4 @@ for ticker in tickers:
 
     print(f"Comparable Companies:\n{df_cca}\n")
     print(f"Competitors Liquidity Ratios:\n{df_cc_l}\n")
-    print(f"Competitors Valuation Ratios {start}-{end}:\n{df_cc_v}\n")
+    print(f"Competitors Valuation Ratios:\n{df_cc_v}\n")
