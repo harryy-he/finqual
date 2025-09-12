@@ -139,24 +139,28 @@ class SecApi:
 
         records = []
 
-        preferred_currency = self.get_currency()
-
         for key, value in data.items():
             units = value.get('units', {})
-            currency_data = units.get(preferred_currency)
-            if currency_data:
-                for entry in currency_data:
+
+            # Iterate over all unit types
+            for unit_type, entries in units.items():
+                for entry in entries:
                     if 'frame' in entry and entry.get('form') in ['10-K', '10-Q', '8-K', '20-F', '40-F', '6-F', '6-K']:
                         records.append({
                             "key": key,
                             "description": value.get('description', ''),
                             "value": entry.get('val'),
+                            "unit": unit_type,  # keep track of what unit it is (shares, USD, etc.)
                             "frame": entry.get('frame'),
                             "form": entry.get('form'),
-                            "fp" : entry.get('fp'),
+                            "fp": entry.get('fp'),
                         })
 
-        return pl.DataFrame(records)
+        main_currency = self.get_currency()
+        df = pl.DataFrame(records)
+        df = df.filter(pl.col("unit").is_in(["shares", main_currency]))
+
+        return df
 
     @weak_lru(maxsize=10)
     def get_sector(self):
@@ -221,8 +225,16 @@ class SecApi:
             return shares
 
         except (IndexError, KeyError):
-            # print(f"*** SecApi: No outstanding share data found for {self.ticker}, returning None.")
-            return None
+            try:
+                df_shares = self.sec_data.filter(pl.col("key").is_in(["CommonStockSharesOutstanding", 'WeightedAverageNumberOfSharesOutstandingBasic']))
+                df_shares_i = df_shares.filter(pl.col("frame").is_in([inst_lookup_val_prev]))
+                shares = df_shares_i.item(0, 'value')
+
+                return shares
+
+            except (IndexError, KeyError):
+                # print(f"*** SecApi: No outstanding share data found for {self.ticker}, returning None.")
+                return None
 
     @weak_lru(maxsize=10)
     def get_annual_quarter(self):
