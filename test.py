@@ -1,6 +1,6 @@
 import finqual as fq
 
-tickers = ["MSFT"]  # You can add more tickers if needed
+tickers = ["ORCL"]  # You can add more tickers if needed
 start = 2024
 end = 2025
 quarter = 3  # For quarterly data
