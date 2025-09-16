@@ -1,8 +1,8 @@
 import finqual as fq
 
-tickers = ["PLTR"]  # You can add more tickers if needed
-start = 2020
-end = 2023
+tickers = ["MSFT"]  # You can add more tickers if needed
+start = 2024
+end = 2025
 quarter = 3  # For quarterly data
 
 for ticker in tickers:
@@ -16,7 +16,7 @@ for ticker in tickers:
     df_inc_ttm = fq.Finqual(ticker).income_stmt_ttm()  # Get annual income statements for end
 
     # Period Data
-    df_incp = fq.Finqual(ticker).income_stmt_period(start_year=start, end_year=end) # Add '_period' to the end of the function and define the start and end to retrieve the income statement over the period
+    df_incp = fq.Finqual(ticker).income_stmt_period(start_year=start, end_year=end, quarter=True) # Add '_period' to the end of the function and define the start and end to retrieve the income statement over the period
     df_cfp = fq.Finqual(ticker).cash_flow_period(start_year=start, end_year=end, quarter=True) # Add 'quarter=True' to retrieve the quarterly information over that time period
 
     # Ratios

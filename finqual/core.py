@@ -229,7 +229,8 @@ class Finqual:
         quarter_list = self._previous_quarters(year, quarter)
 
         quarterly_results = []
-        fy_result = self._process_financials(year, None, label_type, period_type, target_yf_list, tolerance)
+        fy_diff = self.sec_edgar.align_fy_year(False)
+        fy_result = self._process_financials(year - fy_diff, None, label_type, period_type, target_yf_list, tolerance)
 
         for period in quarter_list:
 
@@ -332,7 +333,7 @@ class Finqual:
         ]
 
         rules = [
-            build_rule("Gross Profit = Total Revenue - Cost Of Revenue"),
+            build_rule("Gross Profit = Total Revenue - Cost Of Revenue", prefer_balance=["Gross Profit"]),
             build_rule("Operating Income = Gross Profit - Selling General And Administration - Research And Development - Other Operating Income Expense", prefer_balance=["Other Operating Income Expense"]),
             build_rule("Pretax Income = Operating Income - Interest Expense + Other Non Operating Income Expense", prefer_balance=["Other Non Operating Income Expense"]),
             build_rule("Net Income = Pretax Income - Tax Provision"),
@@ -359,7 +360,7 @@ class Finqual:
         }
 
         for item, inc in increments.items():
-            df_income.loc[df_income["line_item"] == item, "total_prob"] += inc
+            df_income.loc[(df_income["line_item"] == item) & (df_income["total_prob"] != 0), "total_prob"] += inc
 
         # ---
 

@@ -59,6 +59,40 @@ class SecApi:
         return json_request
 
     @weak_lru(maxsize=10)
+    def get_latest_10k(self):
+        df = pl.DataFrame(self.sec_submissions['filings']['recent'])
+        df = df.filter(pl.col("primaryDocDescription") == "10-K").head(1)
+
+        report_date = df['reportDate'][0]
+        year = int(report_date[:4])
+
+        return year
+
+    @weak_lru(maxsize=10)
+    def align_fy_year(self, instant: bool):
+
+        last_year = self.get_latest_10k()
+
+        # ---
+
+        df_filter = self.sec_data.filter(pl.col("form").is_in(["10-K", "8-K", "6-K", "20-F", "40-F", "6-F"]))
+
+        if instant:
+            df_filter = df_filter.filter(pl.col("frame").str.contains("I"))
+        else:
+            df_filter = df_filter.filter(~pl.col("frame").str.contains("I"))
+
+        df_filter = df_filter.filter(pl.col("fp").str.contains("FY"))
+        df_filter = df_filter.with_columns([pl.col("frame").str.extract(r"(\d+)", 1).cast(pl.Int32).alias("FY")])
+        last_fy = df_filter["FY"].max()
+
+        # ---
+
+        diff = last_year - last_fy
+
+        return diff
+
+    @weak_lru(maxsize=10)
     def get_cik_code(self):
 
         url = "https://www.sec.gov/files/company_tickers_exchange.json"
