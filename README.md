@@ -64,7 +64,7 @@ We can also conduct comparable company analysis by using the CCA method, as show
 import finqual as fq
 fq.CCA("NVDA").get_c() # Get comparable companies that are in the same sector and most similar in market capitalisation to NVIDIA
 fq.CCA("NVDA").liquidity_ratios(2020) # Similar to before, but retrieve the liquidity ratios for NVIDIA and its competitors for FY2020
-fq.CCA("NVDA").valuation_ratios_period(2020, 2022) # Similar to before, but retrieve the valuation ratios for NVIDIA and its competitors for FY2020 to FY2022
+fq.CCA("NVDA").valuation_ratios() # Similar to before, but retrieve the valuation ratios for NVIDIA and its competitors (only TTM supported currently)
 ```
 
 ![NVIDIA 2024 Comparable Company Analysis](https://raw.githubusercontent.com/harryy-he/finqual/main/images/nvda_cca_2024.png)
