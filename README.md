@@ -48,7 +48,7 @@ We can also retrieve selected financial ratios (sorted by type) for the chosen c
 ```
 fq.Finqual("NVDA").profitability_ratios(2020) # Get selected profitability ratios for FY2020 (e.g. Operating Margin, Gross Margin, ROE, ROA, ROIC etc)
 fq.Finqual("NVDA").liquidity_ratios(2020) # Get selected liquidity ratios for FY2020 (e.g. D/E, Current, Quick Ratio) 
-fq.Finqual("NVDA").valuation_ratios(2020) # Get selected valuation ratios for FY2020 (e.g. P/E, EV/EBITDA, EPS etc)
+fq.Finqual("NVDA").valuation_ratios() # Get selected valuation ratios for TTM (e.g. P/E, EV/EBITDA, EPS etc)
 
 # ---
 
