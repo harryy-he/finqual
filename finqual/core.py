@@ -229,7 +229,12 @@ class Finqual:
         quarter_list = self._previous_quarters(year, quarter)
 
         quarterly_results = []
-        fy_diff = self.sec_edgar.align_fy_year(False)
+
+        if quarter_list[0][1] != 3:
+            fy_diff = self.sec_edgar.align_fy_year(False)
+        else:
+            fy_diff = 0
+
         fy_result = self._process_financials(year - fy_diff, None, label_type, period_type, target_yf_list, tolerance)
 
         for period in quarter_list:

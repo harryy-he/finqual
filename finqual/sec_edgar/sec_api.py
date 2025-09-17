@@ -61,7 +61,7 @@ class SecApi:
     @weak_lru(maxsize=10)
     def get_latest_10k(self):
         df = pl.DataFrame(self.sec_submissions['filings']['recent'])
-        df = df.filter(pl.col("primaryDocDescription") == "10-K").head(1)
+        df = df.filter(pl.col("primaryDocDescription").is_in(["10-K", "20-F"])).head(1)
 
         if len(df) > 0:
             report_date = df['reportDate'][0]
@@ -70,7 +70,6 @@ class SecApi:
 
         else:
             return None
-
 
     @weak_lru(maxsize=10)
     def align_fy_year(self, instant: bool):
@@ -89,6 +88,7 @@ class SecApi:
                 df_filter = df_filter.filter(pl.col("frame").str.contains("I"))
             else:
                 df_filter = df_filter.filter(~pl.col("frame").str.contains("I"))
+                df_filter = df_filter.filter(~pl.col("frame").str.contains("Q"))
 
             df_filter = df_filter.filter(pl.col("fp").str.contains("FY"))
             df_filter = df_filter.with_columns([pl.col("frame").str.extract(r"(\d+)", 1).cast(pl.Int32).alias("FY")])
@@ -196,6 +196,7 @@ class SecApi:
                             "frame": entry.get('frame'),
                             "form": entry.get('form'),
                             "fp": entry.get('fp'),
+                            "filed": entry.get('filed'),
                         })
 
         main_currency = self.get_currency()
