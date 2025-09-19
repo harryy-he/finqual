@@ -338,7 +338,7 @@ class Finqual:
         ]
 
         rules = [
-            build_rule("Gross Profit = Total Revenue - Cost Of Revenue", prefer_balance=["Gross Profit"]),
+            build_rule("Gross Profit = Total Revenue - Cost Of Revenue"),
             build_rule("Operating Income = Gross Profit - Selling General And Administration - Research And Development - Other Operating Income Expense", prefer_balance=["Other Operating Income Expense"]),
             build_rule("Pretax Income = Operating Income - Interest Expense + Other Non Operating Income Expense", prefer_balance=["Other Non Operating Income Expense"]),
             build_rule("Net Income = Pretax Income - Tax Provision"),
