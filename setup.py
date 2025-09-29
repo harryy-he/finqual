@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="finqual",  # This must be unique on PyPI
-    version="4.0.3",
+    version="4.0.4",
     author="Harry",
     description="A Python package to help investors to conduct financial research, analysis and comparable company analysis.",
     long_description=open("README.md", encoding="utf-8").read(),
@@ -26,3 +26,6 @@ setup(
                       "pyarrow>=12.0.0",
                       ]
 )
+
+# On Pycharm, ONLY commit the "DO NOT COMMIT AND PUSH", then go to "Git Log" then tag the new commit by right clicking
+# and adding a new version, then right click on that and click on "Push All Up to Here"
