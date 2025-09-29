@@ -267,7 +267,7 @@ class Finqual:
             tolerance = 0.0
 
         sec_data = self.sec_edgar.financial_data_period(year, quarter)
-        sec_data_dict = dict(zip(sec_data['key'], sec_data['value']))
+        sec_data_dict = dict(zip(sec_data['key'], sec_data['val']))
 
         if len(sec_data_dict) > 0:
             if quarter == self.sec_edgar.get_annual_quarter():
@@ -395,7 +395,7 @@ class Finqual:
         df_bs = self._process_financials(
             year, quarter,
             label_type=tuple(["balance_sheet"]),
-            period_type=tuple(["instant", "duration"]),
+            period_type=tuple(["instant"]),
             target_yf_list=tuple(balance_list),
         )
 
