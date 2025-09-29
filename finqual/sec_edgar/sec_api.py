@@ -83,6 +83,7 @@ def convert_to_quarters(df: pl.DataFrame) -> pl.DataFrame:
         pl.col("end").shift(1).over(["key", "start"]).alias("prev_end")
         ])
 
+    # If quarter_val is empty, then fill with "val"
     df_quarters = df_quarters.with_columns([
         pl.when(pl.col("quarter_val").is_null())
         .then(pl.col("val"))
@@ -90,6 +91,7 @@ def convert_to_quarters(df: pl.DataFrame) -> pl.DataFrame:
         .alias("quarter_val"),
         ])
 
+    # If frame_map is "I" then set "quarter_val" to "val"
     df_quarters = df_quarters.with_columns([
         pl.when(pl.col("frame_map").str.contains("I"))
         .then(pl.col("val"))
@@ -99,6 +101,7 @@ def convert_to_quarters(df: pl.DataFrame) -> pl.DataFrame:
 
     df_quarters = df_quarters.filter(pl.col("quarter_val") != 0)
 
+    # Setting "val" to the correct value
     df_quarters = df_quarters.with_columns([
         pl.when(pl.col("frame_map").str.contains("Q"))
         .then(pl.col("quarter_val"))
