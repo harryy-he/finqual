@@ -9,8 +9,8 @@ for ticker in tickers:
 
     # Financial Statements
     df_inc = fq.Finqual(ticker).income_stmt(year=end) # Get annual income statements for end
-    df_bs = fq.Finqual(ticker).balance_sheet(year=end, quarter=quarter) # Get quarterly balance sheet for end and quarter
-    df_cf = fq.Finqual(ticker).cash_flow(year=start) # Get annual cash flow statements for start
+    df_bs = fq.Finqual(ticker).balance_sheet(year=start, quarter=quarter) # Get quarterly balance sheet for end and quarter
+    df_cf = fq.Finqual(ticker).cash_flow(year=start, quarter = quarter) # Get annual cash flow statements for start
 
     # TTM
     df_inc_ttm = fq.Finqual(ticker).income_stmt_ttm()  # Get annual income statements for end

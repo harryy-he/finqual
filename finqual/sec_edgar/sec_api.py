@@ -21,6 +21,96 @@ def weak_lru(maxsize=128, typed=False):
 
     return wrapper
 
+def map_missing_frames(df: pl.DataFrame) -> pl.DataFrame:
+
+    # Creating mapping based on "key", "end" and "frame" columns
+    frame_map = (
+        df.filter(pl.col("frame").is_not_null())
+        .select(["key", "end", "frame"])
+        .unique()
+    )
+
+    # Mapping to dataframe
+    df_filled = (
+        df.join(frame_map, on=["end"], how="left", suffix="_mapped")
+        .with_columns(
+            pl.when(pl.col("frame").is_null())
+            .then(pl.col("frame_mapped"))
+            .otherwise(pl.col("frame"))
+            .alias("frame_map")
+        )
+        .drop("frame_mapped")
+    )
+
+    # Remove any I's from "frame_map" col
+    df_filled = df_filled.with_columns([
+         pl.col("frame_map").str.replace("I", "")
+        .alias("frame_map")
+    ])
+
+    # Add back any I's for when "start" col is "None"
+    df_filled = df_filled.with_columns([
+        pl.when(pl.col("start") == "None")
+        .then(pl.col("frame_map") + "I")
+        .otherwise(pl.col("frame_map"))
+        .alias("frame_map")
+    ]).unique(subset=["key", "frame_map"], keep='last')
+
+    df_filled = df_filled.sort(["key", "end", "frame_map"])
+
+    return df_filled
+
+
+def convert_to_quarters(df: pl.DataFrame) -> pl.DataFrame:
+    """
+    Convert cumulative SEC values into true quarter-by-quarter values.
+    Works on a Polars DataFrame with columns: key, start, end, value, ...
+    Handles all keys automatically.
+    """
+
+    # Ensure dates are parsed
+    df = df.with_columns([
+        pl.col("start").str.strptime(pl.Date, strict=False),
+        pl.col("end").str.strptime(pl.Date, strict=False),
+    ])
+
+    # Sort by key + end date
+    df = df.sort(["key", "end"])
+
+    # Compute quarter values within each key
+    df_quarters = df.with_columns([
+        (pl.col("val") - pl.col("val").shift(1)).over(["key", "start"]).alias("quarter_val"),
+        pl.col("end").shift(1).over(["key", "start"]).alias("prev_end")
+        ])
+
+    # If quarter_val is empty, then fill with "val"
+    df_quarters = df_quarters.with_columns([
+        pl.when(pl.col("quarter_val").is_null())
+        .then(pl.col("val"))
+        .otherwise(pl.col("quarter_val"))
+        .alias("quarter_val"),
+        ])
+
+    # If frame_map is "I" then set "quarter_val" to "val"
+    df_quarters = df_quarters.with_columns([
+        pl.when(pl.col("frame_map").str.contains("I"))
+        .then(pl.col("val"))
+        .otherwise(pl.col("quarter_val"))
+        .alias("quarter_val")
+    ])
+
+    df_quarters = df_quarters.filter(pl.col("quarter_val") != 0)
+
+    # Setting "val" to the correct value
+    df_quarters = df_quarters.with_columns([
+        pl.when(pl.col("frame_map").str.contains("Q"))
+        .then(pl.col("quarter_val"))
+        .otherwise(pl.col("val"))
+        .alias("val")
+    ])
+
+    return df_quarters.select(["key", "start", "end", "quarter_val", "val", "unit", "frame", "frame_map", "form", "fp"])
+
 class SecApi:
 
     def __init__(self, ticker):
@@ -187,21 +277,25 @@ class SecApi:
             # Iterate over all unit types
             for unit_type, entries in units.items():
                 for entry in entries:
-                    if 'frame' in entry and entry.get('form') in ['10-K', '10-Q', '8-K', '20-F', '40-F', '6-F', '6-K']:
+                    if entry.get('form') in ['10-K', '10-Q', '8-K', '20-F', '40-F', '6-F', '6-K']:
                         records.append({
                             "key": key,
+                            "start": entry.get('start', 'None'),
+                            "end": entry.get('end', 'None'),
                             "description": value.get('description', ''),
-                            "value": entry.get('val'),
+                            "val": entry.get('val'),
                             "unit": unit_type,  # keep track of what unit it is (shares, USD, etc.)
                             "frame": entry.get('frame'),
                             "form": entry.get('form'),
                             "fp": entry.get('fp'),
-                            "filed": entry.get('filed'),
                         })
 
         main_currency = self.get_currency()
         df = pl.DataFrame(records)
         df = df.filter(pl.col("unit").is_in(["shares", main_currency]))
+
+        df = map_missing_frames(df)
+        df = convert_to_quarters(df)
 
         return df
 
@@ -271,7 +365,7 @@ class SecApi:
             try:
                 df_shares = self.sec_data.filter(pl.col("key").is_in(["CommonStockSharesOutstanding", 'WeightedAverageNumberOfSharesOutstandingBasic']))
                 df_shares_i = df_shares.filter(pl.col("frame").is_in([inst_lookup_val_prev]))
-                shares = df_shares_i.item(0, 'value')
+                shares = df_shares_i.item(0, 'val')
 
                 return shares
 
@@ -299,7 +393,7 @@ class SecApi:
         dur_lookup_val = f"CY{year}" if quarter is None else f"CY{year}Q{quarter}"
         inst_lookup_val = f"CY{year}Q{annual_quarter}I" if quarter is None else f"CY{year}Q{quarter}I"
 
-        data = self.sec_data.filter(pl.col("frame").is_in([dur_lookup_val, inst_lookup_val]))
+        data = self.sec_data.filter(pl.col("frame_map").is_in([dur_lookup_val, inst_lookup_val]))
         data = data.unique()
 
         return data
