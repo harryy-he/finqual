@@ -105,7 +105,7 @@ def build_rule(equation_str: str, prefer_balance: list[str] = None) -> dict:
         "prefer_balance": [v.replace(" ", "_").lower() for v in prefer_balance]
     }
 
-def triangulate_smart(df: pd.DataFrame, rules) -> (pl.DataFrame, list):
+def triangulate_smart(df: pd.DataFrame, rules) -> (pd.DataFrame, list):
     df = df.set_index("line_item")
     notes = []
     updated = set()  # Keep track of recalculated items
@@ -120,24 +120,27 @@ def triangulate_smart(df: pd.DataFrame, rules) -> (pl.DataFrame, list):
             values = [df.at[var, "value"] for var in vars_]
             var_keys = [v.replace(" ", "_").lower() for v in vars_]
 
-            # Force preferred balancing items to lowest prob
-            for i, key in enumerate(var_keys):
-                if key in prefer and vars_[i] not in updated:
-                    probs[i] = 0.0  # Ensure this becomes the target
-
+            # find candidates that are low confidence and not updated yet
             low_conf_indices = [i for i, p in enumerate(probs) if p < 3.0 and vars_[i] not in updated]
 
-            if len(low_conf_indices) == 1:
-                i = low_conf_indices[0]
-            elif len(low_conf_indices) > 1:
-                preferred_found = [i for i in low_conf_indices if var_keys[i] in prefer]
+            if not low_conf_indices:
+                continue
+
+            # find the minimum probability among candidates
+            min_prob = min(probs[i] for i in low_conf_indices)
+            candidates = [i for i in low_conf_indices if probs[i] == min_prob]
+
+            if len(candidates) == 1:
+                i = candidates[0]
+            else:
+                # tie -> use prefer_balance if present
+                preferred_found = [j for j in candidates if vars_[j] in prefer or var_keys[j] in prefer]
                 if preferred_found:
                     i = preferred_found[0]
                 else:
-                    i = sorted(low_conf_indices, key=lambda x: probs[x])[0]
-            else:
-                continue  # All high-confidence or already updated
+                    i = candidates[0]  # fallback: pick the first
 
+            # only calculate if all other vars are known
             if all(pd.notnull(values[j]) for j in range(len(vars_)) if j != i):
                 kwargs = {var_keys[j]: None if j == i else values[j] for j in range(len(vars_))}
                 result = calc_fn(**kwargs)
@@ -228,34 +231,48 @@ class Finqual:
 
         quarter_list = self._previous_quarters(year, quarter)
 
-        quarterly_results = []
-
         if quarter_list[0][1] != 3:
             fy_diff = self.sec_edgar.align_fy_year(False)
         else:
             fy_diff = 0
 
-        fy_result = self._process_financials(year - fy_diff, None, label_type, period_type, target_yf_list, tolerance)
+        # ---
+
+        if "".join(label_type) in ['income_statement']:
+            fy_result = self.income_stmt(year - fy_diff, None).squeeze()
+
+        elif "".join(label_type) in ['cash_flow']:
+            fy_result = self.cash_flow(year - fy_diff, None).squeeze()
+
+        quarterly_results = []
 
         for period in quarter_list:
-
             curr_year = period[0]
             curr_quarter = period[1]
 
-            quarterly_results.append(self._process_financials(curr_year, curr_quarter, label_type, period_type, target_yf_list, tolerance))
+            if "".join(label_type) in ['income_statement']:
+                quarterly_results.append(self.income_stmt(curr_year, curr_quarter))
+
+            elif "".join(label_type) in ['cash_flow']:
+                quarterly_results.append(self.cash_flow(curr_year, curr_quarter))
+
+        # ---
 
         df_quarterly = pd.concat(quarterly_results, axis=1)
-        df_quarterly = df_quarterly.T.groupby(level=0).sum().T
+        df_quarterly_sum = df_quarterly.sum(axis=1)
 
-        df_annual_quarter = fy_result.copy()
-        df_annual_quarter['value'] = fy_result['value'] - df_quarterly['value']
+        df_annual_quarter = fy_result - df_quarterly_sum
+        df_annual_quarter.name = 'value'
+        df_annual_quarter = df_annual_quarter.to_frame()
 
         if "".join(label_type) in ['cash_flow']:
 
-            df_annual_quarter.loc[4, "value"] = quarterly_results[0].loc[5, "value"]  # Set Beginning Cash to last quarter End Cash
-            df_annual_quarter.loc[5, "value"] = fy_result.loc[5, "value"].round(0)  # Set End Cash to FY End Cash
+            df_annual_quarter.iloc[4, 0] = df_quarterly.iloc[5,0]  # Set Beginning Cash to last quarter End Cash
+            df_annual_quarter.iloc[5, 0] = fy_result[5].round(0)  # Set End Cash to FY End Cash
 
+        df_annual_quarter['line_item'] = df_annual_quarter.index
         df_annual_quarter['value'] = df_annual_quarter['value'].apply(lambda x: int(x))
+        df_annual_quarter['total_prob'] = 1.0
 
         return df_annual_quarter
 
@@ -338,7 +355,7 @@ class Finqual:
         ]
 
         rules = [
-            build_rule("Gross Profit = Total Revenue - Cost Of Revenue"),
+            build_rule("Gross Profit = Total Revenue - Cost Of Revenue", prefer_balance=["Gross Profit"]),
             build_rule("Operating Income = Gross Profit - Selling General And Administration - Research And Development - Other Operating Income Expense", prefer_balance=["Other Operating Income Expense"]),
             build_rule("Pretax Income = Operating Income - Interest Expense + Other Non Operating Income Expense", prefer_balance=["Other Non Operating Income Expense"]),
             build_rule("Net Income = Pretax Income - Tax Provision"),
