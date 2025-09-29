@@ -28,4 +28,5 @@ setup(
 )
 
 # On Pycharm, ONLY commit the "DO NOT COMMIT AND PUSH", then go to "Git Log" then tag the new commit by right clicking
-# and adding a new version, then right click on that and click on "Push All Up to Here"
+# and adding a new version, then right click on that and click on "Push All Up to Here", then right click on the TAG and
+# click "Push to origin".
