@@ -268,10 +268,10 @@ class Finqual:
         if "".join(label_type) in ['cash_flow']:
 
             df_annual_quarter.iloc[4, 0] = df_quarterly.iloc[5,0]  # Set Beginning Cash to last quarter End Cash
-            df_annual_quarter.iloc[5, 0] = fy_result[5].round(0)  # Set End Cash to FY End Cash
+            df_annual_quarter.iloc[5, 0] = fy_result.iloc[5].round(0)  # Set End Cash to FY End Cash
 
         df_annual_quarter['line_item'] = df_annual_quarter.index
-        df_annual_quarter['value'] = df_annual_quarter['value'].apply(lambda x: int(x))
+        df_annual_quarter['value'] = df_annual_quarter['value'].astype(int)
         df_annual_quarter['total_prob'] = 1.0
 
         return df_annual_quarter
