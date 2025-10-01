@@ -9,7 +9,6 @@ import functools
 from importlib.resources import files
 import json
 import numpy as np
-import pandas as pd
 import polars as pl
 import re
 import weakref
@@ -105,10 +104,35 @@ def build_rule(equation_str: str, prefer_balance: list[str] = None) -> dict:
         "prefer_balance": [v.replace(" ", "_").lower() for v in prefer_balance]
     }
 
-def triangulate_smart(df: pd.DataFrame, rules) -> (pd.DataFrame, list):
-    df = df.set_index("line_item")
-    notes = []
-    updated = set()  # Keep track of recalculated items
+def triangulate_smart(df: pl.DataFrame, rules: list[dict[str]]) -> tuple[pl.DataFrame, list[str]]:
+    """
+    Triangulate financials using rule-based recalculation in Polars.
+
+    Parameters
+    ----------
+    df : pl.DataFrame
+        Must have columns ["line_item", "value", "total_prob"]
+    rules : list of dicts
+        Each dict contains:
+        - "vars": list[str]  # variables in the rule
+        - "calc": callable   # function accepting keyword args
+        - "prefer_balance": optional list[str]  # tie-breaker
+
+    Returns
+    -------
+    pl.DataFrame, list[str]
+    """
+    notes: list[str] = []
+    updated: set[str] = set()
+
+    # Convert to dict-of-rows keyed by line_item for fast updates
+    data = {
+        row["line_item"]: {
+            "value": float(row["value"]) if row["value"] is not None else None,
+            "total_prob": float(row["total_prob"]) if row["total_prob"] is not None else None
+        }
+        for row in df.iter_rows(named=True)
+    }
 
     for rule in rules:
         vars_ = rule["vars"]
@@ -116,45 +140,57 @@ def triangulate_smart(df: pd.DataFrame, rules) -> (pd.DataFrame, list):
         prefer = rule.get("prefer_balance", [])
 
         try:
-            probs = [df.at[var, "total_prob"] for var in vars_]
-            values = [df.at[var, "value"] for var in vars_]
+            probs = [data[v]["total_prob"] for v in vars_]
+            values = [data[v]["value"] for v in vars_]
             var_keys = [v.replace(" ", "_").lower() for v in vars_]
 
-            # find candidates that are low confidence and not updated yet
-            low_conf_indices = [i for i, p in enumerate(probs) if p < 3.0 and vars_[i] not in updated]
-
+            # Candidates: low confidence and not yet updated
+            low_conf_indices = [
+                i for i, p in enumerate(probs)
+                if (p is not None and p < 3.0 and vars_[i] not in updated)
+            ]
             if not low_conf_indices:
                 continue
 
-            # find the minimum probability among candidates
             min_prob = min(probs[i] for i in low_conf_indices)
             candidates = [i for i in low_conf_indices if probs[i] == min_prob]
 
+            # Select candidate
             if len(candidates) == 1:
                 i = candidates[0]
             else:
-                # tie -> use prefer_balance if present
                 preferred_found = [j for j in candidates if vars_[j] in prefer or var_keys[j] in prefer]
-                if preferred_found:
-                    i = preferred_found[0]
-                else:
-                    i = candidates[0]  # fallback: pick the first
+                i = preferred_found[0] if preferred_found else candidates[0]
 
-            # only calculate if all other vars are known
-            if all(pd.notnull(values[j]) for j in range(len(vars_)) if j != i):
+            # Only calculate if all other vars are known
+            if all(values[j] is not None for j in range(len(vars_)) if j != i):
                 kwargs = {var_keys[j]: None if j == i else values[j] for j in range(len(vars_))}
                 result = calc_fn(**kwargs)
                 if result is not None:
                     missing_var = vars_[i]
-                    df.at[missing_var, "value"] = result
-                    df.at[missing_var, "total_prob"] = 1.0
-                    updated.add(missing_var)  # Lock this variable
+                    data[missing_var]["value"] = float(result)
+                    data[missing_var]["total_prob"] = 1.0
+                    updated.add(missing_var)
                     notes.append(f"Recalculated '{missing_var}' using rule '{rule['name']}'")
         except KeyError:
             continue
 
-    df.reset_index(inplace=True)
-    return df, notes
+    # Rebuild Polars DataFrame, ensuring numeric columns are floats
+    df_out = pl.DataFrame(
+        {
+            "line_item": list(data.keys()),
+            "value": [data[k]["value"] for k in data],
+            "total_prob": [data[k]["total_prob"] for k in data],
+        }
+    )
+
+    # Force float dtype explicitly to avoid mixed-type errors
+    df_out = df_out.with_columns([
+        pl.col("value").cast(pl.Float64),
+        pl.col("total_prob").cast(pl.Float64)
+    ])
+
+    return df_out, notes
 
 # ----------------------------------------------------------------------------------
 
@@ -223,11 +259,7 @@ class Finqual:
         return results
 
     @weak_lru(maxsize=10)
-    def _process_annual_quarter(self, year: int, quarter: int, label_type: tuple,
-                                period_type: tuple, target_yf_list: tuple, tolerance: float = 0.4):
-
-        if self.taxonomy == 'ifrs-full':
-            tolerance = 0.0
+    def _process_annual_quarter(self, year: int, quarter: int, label_type: tuple):
 
         quarter_list = self._previous_quarters(year, quarter)
 
@@ -236,43 +268,57 @@ class Finqual:
         else:
             fy_diff = 0
 
-        # ---
+        # --- Select FY result
+        fy_result = []
 
-        if "".join(label_type) in ['income_statement']:
-            fy_result = self.income_stmt(year - fy_diff, None).squeeze()
+        if "".join(label_type) == "income_statement":
+            fy_result = self.income_stmt(year - fy_diff, None)
+        elif "".join(label_type) == "cash_flow":
+            fy_result = self.cash_flow(year - fy_diff, None)
 
-        elif "".join(label_type) in ['cash_flow']:
-            fy_result = self.cash_flow(year - fy_diff, None).squeeze()
-
+        # --- Collect quarterly results
         quarterly_results = []
 
-        for period in quarter_list:
-            curr_year = period[0]
-            curr_quarter = period[1]
+        for curr_year, curr_quarter in quarter_list:
+            if "".join(label_type) == "income_statement":
+                quarterly_results.append(self.income_stmt(curr_year, curr_quarter)[:,1])
 
-            if "".join(label_type) in ['income_statement']:
-                quarterly_results.append(self.income_stmt(curr_year, curr_quarter))
+            elif "".join(label_type) == "cash_flow":
+                quarterly_results.append(self.cash_flow(curr_year, curr_quarter)[:,1])
 
-            elif "".join(label_type) in ['cash_flow']:
-                quarterly_results.append(self.cash_flow(curr_year, curr_quarter))
+        quarterly_sum = sum(quarterly_results)
 
-        # ---
+        # --- Adjust cash flow specifics
+        df_annual_quarter = []
 
-        df_quarterly = pd.concat(quarterly_results, axis=1)
-        df_quarterly_sum = df_quarterly.sum(axis=1)
+        if "".join(label_type) == "income_statement":
 
-        df_annual_quarter = fy_result - df_quarterly_sum
-        df_annual_quarter.name = 'value'
-        df_annual_quarter = df_annual_quarter.to_frame()
+            fy_series = fy_result[:, 1]
+            annual_quarter = fy_series - quarterly_sum
 
-        if "".join(label_type) in ['cash_flow']:
+            # Put it back into a dataframe with line items
+            df_annual_quarter = pl.DataFrame({
+                "line_item": fy_result[:, 0],
+                "value": annual_quarter,
+                "total_prob": 1
+            })
 
-            df_annual_quarter.iloc[4, 0] = df_quarterly.iloc[5,0]  # Set Beginning Cash to last quarter End Cash
-            df_annual_quarter.iloc[5, 0] = fy_result.iloc[5].round(0)  # Set End Cash to FY End Cash
+        elif "".join(label_type) == "cash_flow":
+            beginning_cash = self.cash_flow(quarter_list[0][0], quarter_list[0][1])[4,1]
+            end_cash = fy_result[5,1]
 
-        df_annual_quarter['line_item'] = df_annual_quarter.index
-        df_annual_quarter['value'] = df_annual_quarter['value'].astype(int)
-        df_annual_quarter['total_prob'] = 1.0
+            fy_series = fy_result[:, 1]
+            annual_quarter = fy_series - quarterly_sum
+
+            annual_quarter[4] = beginning_cash
+            annual_quarter[5] = end_cash
+
+            # Put it back into a dataframe with line items
+            df_annual_quarter = pl.DataFrame({
+                "line_item": fy_result[:, 0],
+                "value": annual_quarter,
+                "total_prob": 1
+            })
 
         return df_annual_quarter
 
@@ -289,7 +335,7 @@ class Finqual:
         if len(sec_data_dict) > 0:
             if quarter == self.sec_edgar.get_annual_quarter():
                 if "".join(label_type) in ['income_statement', 'cash_flow']:
-                    df = self._process_annual_quarter(year, quarter, label_type, period_type, target_yf_list, tolerance)
+                    df = self._process_annual_quarter(year, quarter, label_type)
                     return df
 
             all_dfs = []
@@ -333,7 +379,7 @@ class Finqual:
 
             df_total = df_total.with_columns(df_total["value"].fill_null(0), df_total["total_prob"].fill_null(0))
 
-            return df_total.to_pandas()
+            return df_total
 
         else:
             #print(f"*** Finqual: There is no data available for ticker {self.ticker} for year {year} and/or quarter {quarter} - it may be too newly listed or in the future. \n")
@@ -341,7 +387,7 @@ class Finqual:
             df_target = df_target.with_columns(pl.lit(0).alias("value"))
             df_target = df_target.with_columns(pl.lit(0).alias("total_prob"))
 
-            return df_target.to_pandas()
+            return df_target
 
     @weak_lru(maxsize=10)
     def income_stmt(self, year: int, quarter: int | None = None):
@@ -371,7 +417,7 @@ class Finqual:
 
         # ---
 
-        df_income["total_prob"] = df_income["total_prob"].astype(float)
+        df_income = df_income.with_columns(pl.col("total_prob").cast(pl.Float64))
 
         increments = {
             "Total Revenue": 0.5,
@@ -381,17 +427,30 @@ class Finqual:
             "Net Income": 0.5
         }
 
-        for item, inc in increments.items():
-            df_income.loc[(df_income["line_item"] == item) & (df_income["total_prob"] != 0), "total_prob"] += inc
-
         # ---
+
+        for item, inc in increments.items():
+            df_income = df_income.with_columns(
+                pl.when((pl.col("line_item") == item) & (pl.col("total_prob") != 0))
+                .then(pl.col("total_prob") + inc)
+                .otherwise(pl.col("total_prob"))
+                .alias("total_prob")
+            )
 
         df_income, log = triangulate_smart(df_income, rules)
 
-        label = str(year) if quarter is None else str(year) + "Q" + str(quarter)
-        df_income = df_income.rename(columns={'value': label, 'line_item': self.ticker})
-        df_income = df_income.set_index(self.ticker)
-        df_income = df_income.drop(columns=['total_prob'])
+        label = str(year) if quarter is None else f"{year}Q{quarter}"
+        df_income = df_income.rename({"value": label, "line_item": self.ticker})
+
+        if "total_prob" in df_income.columns:
+            df_income = df_income.drop("total_prob")
+
+        df_income = df_income.with_columns(
+            pl.when(pl.col(label) == -0.0)
+            .then(0.0)
+            .otherwise(pl.col(label).round(0))
+            .alias(label)
+        )
 
         return df_income
 
@@ -429,17 +488,26 @@ class Finqual:
 
         df_bs, log = triangulate_smart(df_bs, rules)
 
-        label = str(year) if quarter is None else str(year) + "Q" + str(quarter)
-        df_bs = df_bs.rename(columns={'value': label, 'line_item': self.ticker})
-        df_bs = df_bs.set_index(self.ticker)
+        label = str(year) if quarter is None else f"{year}Q{quarter}"
+        df_bs = df_bs.rename({"value": label, "line_item": self.ticker})
 
         try:
-            df_bs.loc['Shares Outstanding'] = [self.sec_edgar.get_shares(year, quarter), 1]
+            shares = float(self.sec_edgar.get_shares(year, quarter))
 
-        except ValueError:
-            pass
+        except (ValueError, TypeError):
+            shares = 0.0
 
-        df_bs = df_bs.drop(columns=['total_prob'])
+        df_bs = pl.concat([df_bs, pl.DataFrame({self.ticker: ["Shares Outstanding"], label: [shares], "total_prob": [1.0]})])
+
+        if "total_prob" in df_bs.columns:
+            df_bs = df_bs.drop("total_prob")
+
+        df_bs = df_bs.with_columns(
+            pl.when(pl.col(label) == -0.0)
+            .then(0.0)
+            .otherwise(pl.col(label).round(0))
+            .alias(label)
+        )
 
         return df_bs
 
@@ -470,10 +538,19 @@ class Finqual:
         ]
 
         df_cf, log = triangulate_smart(df_cf, rules)
-        label = str(year) if quarter is None else str(year) + "Q" + str(quarter)
-        df_cf = df_cf.rename(columns={'value': label, 'line_item': self.ticker})
-        df_cf = df_cf.set_index(self.ticker)
-        df_cf = df_cf.drop(columns=['total_prob'])
+
+        label = str(year) if quarter is None else f"{year}Q{quarter}"
+        df_cf = df_cf.rename({"value": label,"line_item": self.ticker})
+
+        if "total_prob" in df_cf.columns:
+            df_cf = df_cf.drop("total_prob")
+
+        df_cf = df_cf.with_columns(
+            pl.when(pl.col(label) == -0.0)
+            .then(0.0)
+            .otherwise(pl.col(label).round(0))
+            .alias(label)
+        )
 
         return df_cf
 
@@ -522,24 +599,33 @@ class Finqual:
             else:
                 ordered_labels = [f"{y}" for y in years_period]
 
-            # Ordering and formatting the result
-            ordered_results = [results[label] for label in ordered_labels]
-            df_total = pd.concat(ordered_results, axis=1)
+            # Collect and concat Polars DataFrames horizontally
+            df_results = [results[label] for label in ordered_labels if label in results]
+            if not df_results:
+                return pl.DataFrame()
 
-            df_total = df_total.loc[:, (df_total != 0).any(axis=0)]
-            df_total = df_total[[label for label in ordered_labels if label in df_total.columns]]
+            df_results = [df.select([df.columns[0], df[df.columns[1]].alias(label)]) for df, label in zip(df_results, ordered_labels)]
+
+            df_total = df_results[0]
+            for df in df_results[1:]:
+                df_total = df_total.join(df, on=df.columns[0])
+
+            non_zero_cols = [col for col in df_total.columns if not (df_total[col] == 0).all()]
+            df_total = df_total.select(non_zero_cols)
+
+            ordered_labels_in_df = [lbl for lbl in ordered_labels if lbl in df_total.columns]
+            df_total = df_total.select([self.ticker] + ordered_labels_in_df)
 
             return df_total
 
         elif append_type == 'ratios':
 
-            # Ordering and formatting the result
-            df_total = pd.concat(results, axis=0)
+            df_total = pl.concat(results.values(), how="vertical")
 
-            df_total = df_total.loc[(df_total != 0).any(axis=1), :]
-            df_total = df_total.sort_values(by='Period', ascending=False)
+            non_zero_mask = (df_total != 0).any(axis=1)
+            df_total = df_total.filter(non_zero_mask)
 
-            df_total = df_total.reset_index(drop=True)
+            df_total = df_total.sort("Period", reverse=True)
 
             return df_total
 
@@ -549,8 +635,9 @@ class Finqual:
     def balance_sheet_period(self, start_year: int, end_year: int, quarter: bool = False):
 
         df_bs = self._financials_period('balance_sheet', start_year, end_year, 'statement', quarter)
-        cols_to_drop = [col for col in df_bs.columns if (df_bs.drop(index="Shares Outstanding")[col] == 0).all()]
-        df_bs = df_bs.drop(columns=cols_to_drop)
+        df_filtered = df_bs.filter(pl.col(self.ticker) != "Shares Outstanding")
+        cols_to_drop = [col for col in df_filtered.columns if (df_filtered[col] == 0).all()]
+        df_bs = df_bs.drop(cols_to_drop)
 
         return df_bs
 
@@ -561,26 +648,51 @@ class Finqual:
         current_year = int(datetime.now().year)
         df_inc = self.income_stmt_period(current_year - 2, current_year + 1, True)
 
-        if len(df_inc.columns) < 4:
+        line_items = df_inc.select(pl.col(df_inc.columns[0]))
+
+        if df_inc.width < 4:
             print("Not enough data to calculate TTM")
-            df_ttm = pd.DataFrame(df_inc[df_inc.columns[:4]].sum(axis=1), columns = ["TTM"])
-            df_ttm["TTM"] = "Not Found"
+
+            df_ttm = df_inc.select([
+                pl.col(line_items),
+                pl.lit("Not Found").alias("TTM")
+            ])
+
             return df_ttm
 
-        df_ttm = pd.DataFrame(df_inc[df_inc.columns[:4]].sum(axis=1), columns = ["TTM"])
+        df_ttm = df_inc.select(pl.col(df_inc.columns[1:5]))
+        ttm = sum(df_ttm)
+
+        df_ttm = pl.DataFrame({
+            self.ticker: line_items,
+            "TTM": ttm,
+        })
+
         return df_ttm
 
     def balance_sheet_ttm(self):
         current_year = int(datetime.now().year)
         df_bs = self.balance_sheet_period(current_year - 1, current_year + 1, True)
 
-        if len(df_bs.columns) < 1:
-            print("Not enough data to calculate latest balance sheet.")
-            df_ttm = pd.DataFrame(df_bs[df_bs.columns[:1]].sum(axis=1), columns = ["TTM"])
-            df_ttm["TTM"] = "Not Found"
+        line_items = df_bs.select(pl.col(df_bs.columns[0]))
+
+        if df_bs.width < 1:
+            print("Not enough data to calculate TTM")
+
+            df_ttm = df_bs.select([
+                pl.col(line_items),
+                pl.lit("Not Found").alias("TTM")
+            ])
+
             return df_ttm
 
-        df_ttm = pd.DataFrame(df_bs[df_bs.columns[:1]].sum(axis=1), columns = ["TTM"])
+        df_ttm = df_bs.select(pl.col(df_bs.columns[1:2]))
+        ttm = sum(df_ttm)
+
+        df_ttm = pl.DataFrame({
+            self.ticker: line_items,
+            "TTM": ttm,
+        })
 
         return df_ttm
 
@@ -588,24 +700,35 @@ class Finqual:
         current_year = int(datetime.now().year)
         df_cf = self.cash_flow_period(current_year - 2, current_year + 1, True)
 
-        if len(df_cf.columns) <= 4:
+        line_items = df_cf.select(pl.col(df_cf.columns[0]))
+
+        if df_cf.width <= 4:
             print("Not enough data to calculate latest TTM for cashflow.")
-            df_ttm = pd.DataFrame(df_cf[df_cf.columns[:4]].sum(axis=1), columns = ["TTM"])
-            df_ttm["TTM"] = "Not Found"
+
+            df_ttm = df_cf.select([
+                pl.col(line_items),
+                pl.lit("Not Found").alias("TTM")
+            ])
+
             return df_ttm
 
-        df_ttm = df_cf[df_cf.columns[:4]].copy()
+        df_ttm = df_cf.select(pl.col(df_cf.columns[1:5]))
+        ttm = sum(df_ttm)
 
-        # ---
+        beginning_cash = df_ttm[4,3]
+        end_cash = df_ttm[5,0]
+        chg_cash = end_cash - beginning_cash
 
-        df_ttm["TTM"] = df_ttm.iloc[:4,:].sum(axis=1)
+        df_ttm = pl.DataFrame({
+            self.ticker: line_items,
+            "TTM": ttm,
+        })
 
-        df_ttm.loc["Beginning Cash Position", "TTM"] = df_cf.iloc[4, 3]
-        df_ttm.loc["End Cash Position", "TTM"] = df_cf.iloc[5, 0]
-        df_ttm.loc["Changes In Cash", "TTM"] = df_cf.iloc[5, 0] - df_cf.iloc[4, 3]
+        # --- Adjust specific line items
 
-        df_ttm = pd.DataFrame(df_ttm["TTM"], columns=["TTM"])
-
+        df_ttm[4,1] = beginning_cash
+        df_ttm[5,1] = end_cash
+        df_ttm[6,1] = chg_cash
 
         return df_ttm
 
@@ -638,10 +761,10 @@ class Finqual:
             for name, fetcher in statement_fetchers.items():
                 if quarter is None:
                     stmt = fetcher(year)
-                    statement_data[name] = dict(zip(stmt.index, stmt[label]))
+                    statement_data[name] = dict(zip(stmt[self.ticker], stmt[label]))
                 else:
                     stmt = fetcher(year, quarter)
-                    statement_data[name] = dict(zip(stmt.index, stmt[label]))
+                    statement_data[name] = dict(zip(stmt[self.ticker], stmt[label]))
 
             result = {'Ticker': self.ticker, 'Period': label}
             for ratio, func in ratio_definitions.items():
@@ -675,8 +798,9 @@ class Finqual:
         }
 
         ratios = self._get_ratios(year, ratio_definitions, statement_fetchers, quarter, True)
-        df_ratio = pd.DataFrame([ratios])
-        df_ratio = df_ratio.fillna("Not Found")
+
+        df_ratio = pl.DataFrame([ratios])
+        df_ratio = df_ratio.fill_null("Not Found")
 
         return df_ratio
 
@@ -692,8 +816,9 @@ class Finqual:
         }
 
         ratios = self._get_ratios(year, ratio_definitions, statement_fetchers, quarter, False)
-        df_ratio = pd.DataFrame([ratios])
-        df_ratio = df_ratio.fillna("Not Found")
+
+        df_ratio = pl.DataFrame([ratios])
+        df_ratio = df_ratio.fill_null("Not Found")
 
         return df_ratio
 
@@ -735,8 +860,9 @@ class Finqual:
         }
 
         ratios = self._get_ratios(year, ratio_definitions, statement_fetchers, quarter, False)
-        df_ratio = pd.DataFrame([ratios])
-        df_ratio = df_ratio.fillna("Not Found")
+
+        df_ratio = pl.DataFrame([ratios])
+        df_ratio = df_ratio.fill_null("Not Found")
 
         return df_ratio
 

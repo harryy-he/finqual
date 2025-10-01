@@ -1,6 +1,5 @@
 from .core import Finqual
 import polars as pl
-import pandas as pd
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import functools
 import weakref
@@ -71,9 +70,21 @@ class CCA:
                 result = future.result()
                 results.append(result)
 
-        df = pd.concat(results)
-        df['Ticker'] = pd.Categorical(df['Ticker'], ordered=True, categories=tickers)
-        df = df.sort_values('Ticker')
+        df = pl.concat(results, how="vertical")
+
+        # --- Ticker mapping
+
+        ticker_order_expr = pl.when(pl.col("Ticker") == tickers[0]).then(0)
+
+        for i, ticker in enumerate(tickers[1:], start=1):
+            ticker_order_expr = ticker_order_expr.when(pl.col("Ticker") == ticker).then(i)
+
+        ticker_order_expr = ticker_order_expr.otherwise(len(tickers)).alias("Ticker_order")
+        df = df.with_columns(ticker_order_expr)
+
+        # --- Sorting
+
+        df = df.sort(["Period", "Ticker_order"],descending=[True, False]).drop("Ticker_order")
 
         return df
 
@@ -93,9 +104,21 @@ class CCA:
                 result = future.result()
                 results.append(result)
 
-        df = pd.concat(results)
-        df['Ticker'] = pd.Categorical(df['Ticker'], ordered=True, categories=tickers)
-        df = df.sort_values(['Period', 'Ticker'], ascending=False)
+        df = pl.concat(results, how="vertical")
+
+        # --- Ticker mapping
+
+        ticker_order_expr = pl.when(pl.col("Ticker") == tickers[0]).then(0)
+
+        for i, ticker in enumerate(tickers[1:], start=1):
+            ticker_order_expr = ticker_order_expr.when(pl.col("Ticker") == ticker).then(i)
+
+        ticker_order_expr = ticker_order_expr.otherwise(len(tickers)).alias("Ticker_order")
+        df = df.with_columns(ticker_order_expr)
+
+        # --- Sorting
+
+        df = df.sort(["Period", "Ticker_order"],descending=[True, False]).drop("Ticker_order")
 
         return df
 
