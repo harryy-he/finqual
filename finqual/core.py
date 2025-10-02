@@ -620,12 +620,19 @@ class Finqual:
 
         elif append_type == 'ratios':
 
-            df_total = pl.concat(results.values(), how="vertical")
+            dfs = []
 
-            non_zero_mask = (df_total != 0).any(axis=1)
+            for df in results.values():
+                df = df.select([df[col].cast(pl.Utf8).fill_null("Not Found") if col not in ("Ticker", "Period") else df[col] for col in df.columns])
+                dfs.append(df)
+
+            df_total = pl.concat(dfs, how="vertical")
+
+            metric_cols = [c for c in df_total.columns if c not in ("Ticker", "Period")]
+            non_zero_mask = df_total.select(pl.any_horizontal([(df_total[c] != "0") & (df_total[c] != "Not Found") for c in metric_cols])).to_series()
             df_total = df_total.filter(non_zero_mask)
 
-            df_total = df_total.sort("Period", reverse=True)
+            df_total = df_total.sort("Period", descending=True)
 
             return df_total
 
