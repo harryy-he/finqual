@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="finqual",  # This must be unique on PyPI
-    version="4.1.1",
+    version="4.2.0",
     author="Harry",
     description="A Python package to help investors to conduct financial research, analysis and comparable company analysis.",
     long_description=open("README.md", encoding="utf-8").read(),

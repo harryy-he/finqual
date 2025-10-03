@@ -70,7 +70,10 @@ class CCA:
                 result = future.result()
                 results.append(result)
 
-        df = pl.concat(results, how="vertical")
+        if not results:
+            return pl.DataFrame()
+
+        df = pl.concat(results)
 
         # --- Ticker mapping
 
@@ -104,7 +107,10 @@ class CCA:
                 result = future.result()
                 results.append(result)
 
-        df = pl.concat(results, how="vertical")
+        if not results:
+            return pl.DataFrame()
+
+        df = pl.concat(results)
 
         # --- Ticker mapping
 
@@ -118,7 +124,7 @@ class CCA:
 
         # --- Sorting
 
-        df = df.sort(["Period", "Ticker_order"],descending=[True, False]).drop("Ticker_order")
+        df = df.sort(["Period", "Ticker_order"], descending=[True, False]).drop("Ticker_order")
 
         return df
 

@@ -332,7 +332,7 @@ class Finqual:
         sec_data = self.sec_edgar.financial_data_period(year, quarter)
         sec_data_dict = dict(zip(sec_data['key'], sec_data['val']))
 
-        if len(sec_data_dict) > 0:
+        if len(sec_data_dict) > 1:
             if quarter == self.sec_edgar.get_annual_quarter():
                 if "".join(label_type) in ['income_statement', 'cash_flow']:
                     df = self._process_annual_quarter(year, quarter, label_type)
@@ -623,13 +623,14 @@ class Finqual:
             dfs = []
 
             for df in results.values():
-                df = df.select([df[col].cast(pl.Utf8).fill_null("Not Found") if col not in ("Ticker", "Period") else df[col] for col in df.columns])
                 dfs.append(df)
 
             df_total = pl.concat(dfs, how="vertical")
 
             metric_cols = [c for c in df_total.columns if c not in ("Ticker", "Period")]
-            non_zero_mask = df_total.select(pl.any_horizontal([(df_total[c] != "0") & (df_total[c] != "Not Found") for c in metric_cols])).to_series()
+
+            df_mask = df_total.select([pl.when(pl.col(c).is_nan()).then(0).otherwise(pl.col(c)).alias(c) for c in metric_cols])
+            non_zero_mask = df_mask.select(pl.any_horizontal([pl.col(c) != 0 for c in metric_cols])).to_series()
             df_total = df_total.filter(non_zero_mask)
 
             df_total = df_total.sort("Period", descending=True)
@@ -653,17 +654,25 @@ class Finqual:
 
     def income_stmt_ttm(self):
         current_year = int(datetime.now().year)
+
+        # TODO: find latest, change previous_quarter method
+        # df_sec = self.sec_edgar.sec_data
+        # df_sec = df_sec.with_columns([pl.col("frame_map").str.extract(r"CY(\d{4})Q\d").cast(pl.Int32).alias("Year"), pl.col("frame_map").str.extract(r"Q(\d)").cast(pl.Int32).alias("Quarter")])
+        #
+        # latest_year = df_sec["Year"].max()
+        # latest_quarter = df_sec.filter(pl.col("Year") == latest_year)["Quarter"].max()
+
         df_inc = self.income_stmt_period(current_year - 2, current_year + 1, True)
 
         line_items = df_inc.select(pl.col(df_inc.columns[0]))
 
         if df_inc.width < 4:
-            print("Not enough data to calculate TTM")
+            print(f"Not enough data to calculate income TTM for {self.ticker}")
 
-            df_ttm = df_inc.select([
-                pl.col(line_items),
-                pl.lit("Not Found").alias("TTM")
-            ])
+            df_ttm = pl.DataFrame({
+                self.ticker: line_items,
+                "TTM": np.nan,
+            })
 
             return df_ttm
 
@@ -684,12 +693,12 @@ class Finqual:
         line_items = df_bs.select(pl.col(df_bs.columns[0]))
 
         if df_bs.width < 1:
-            print("Not enough data to calculate TTM")
+            print(f"No balance sheet data for {self.ticker}")
 
-            df_ttm = df_bs.select([
-                pl.col(line_items),
-                pl.lit("Not Found").alias("TTM")
-            ])
+            df_ttm = pl.DataFrame({
+                self.ticker: line_items,
+                "TTM": np.nan,
+            })
 
             return df_ttm
 
@@ -710,12 +719,12 @@ class Finqual:
         line_items = df_cf.select(pl.col(df_cf.columns[0]))
 
         if df_cf.width <= 4:
-            print("Not enough data to calculate latest TTM for cashflow.")
+            print(f"Not enough data to calculate cashflow TTM for {self.ticker}")
 
-            df_ttm = df_cf.select([
-                pl.col(line_items),
-                pl.lit("Not Found").alias("TTM")
-            ])
+            df_ttm = pl.DataFrame({
+                self.ticker: line_items,
+                "TTM": np.nan,
+            })
 
             return df_ttm
 
@@ -778,14 +787,14 @@ class Finqual:
                 try:
                     result[ratio] = func(statement_data) * ratio_multiplier
                 except (ZeroDivisionError, TypeError):
-                    result[ratio] = "Not Found"
+                    result[ratio] = np.nan
             return result
 
         except KeyError:
             print(f"No data for {self.ticker} found.")
             result = {'Ticker': self.ticker, 'Period': label}
             for ratio, func in ratio_definitions.items():
-                result[ratio] = "Not Found"
+                result[ratio] = np.nan
             return result
 
     def profitability_ratios(self, year: int, quarter: int | None = None):
@@ -807,7 +816,7 @@ class Finqual:
         ratios = self._get_ratios(year, ratio_definitions, statement_fetchers, quarter, True)
 
         df_ratio = pl.DataFrame([ratios])
-        df_ratio = df_ratio.fill_null("Not Found")
+        df_ratio = df_ratio.fill_null(np.nan)
 
         return df_ratio
 
@@ -825,7 +834,7 @@ class Finqual:
         ratios = self._get_ratios(year, ratio_definitions, statement_fetchers, quarter, False)
 
         df_ratio = pl.DataFrame([ratios])
-        df_ratio = df_ratio.fill_null("Not Found")
+        df_ratio = df_ratio.fill_null(np.nan)
 
         return df_ratio
 
@@ -869,7 +878,7 @@ class Finqual:
         ratios = self._get_ratios(year, ratio_definitions, statement_fetchers, quarter, False)
 
         df_ratio = pl.DataFrame([ratios])
-        df_ratio = df_ratio.fill_null("Not Found")
+        df_ratio = df_ratio.fill_null(np.nan)
 
         return df_ratio
 
