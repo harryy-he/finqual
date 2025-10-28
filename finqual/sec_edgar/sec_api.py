@@ -125,8 +125,6 @@ class SecApi:
                         }
 
         self.cik = self.get_cik_code()
-        self.sec_submissions = self.get_company_submissions()
-        self.sec_company_facts = self.get_company_facts()
         self.sec_data = self.get_sec_data()
         self.taxonomy = self.get_taxonomy()
 
@@ -150,7 +148,8 @@ class SecApi:
 
     @weak_lru(maxsize=10)
     def get_latest_10k(self):
-        df = pl.DataFrame(self.sec_submissions['filings']['recent'])
+
+        df = pl.DataFrame(self.get_company_submissions()['filings']['recent'])
         df = df.filter(pl.col("primaryDocDescription").is_in(["10-K", "20-F"])).head(1)
 
         if len(df) > 0:
@@ -172,16 +171,19 @@ class SecApi:
         else:
             # ---
 
-            df_filter = self.sec_data.filter(pl.col("form").is_in(["10-K", "8-K", "6-K", "20-F", "40-F", "6-F"]))
+            df_filter = self.sec_data.filter(pl.col("form").cast(pl.Utf8).is_in(["10-K", "8-K", "6-K", "20-F", "40-F", "6-F"]))
+
+            frame_str = pl.col("frame").cast(pl.Utf8)
+            fp_str = pl.col("fp").cast(pl.Utf8)
 
             if instant:
-                df_filter = df_filter.filter(pl.col("frame").str.contains("I"))
+                df_filter = df_filter.filter(frame_str.str.contains("I"))
             else:
-                df_filter = df_filter.filter(~pl.col("frame").str.contains("I"))
-                df_filter = df_filter.filter(~pl.col("frame").str.contains("Q"))
+                df_filter = df_filter.filter(~frame_str.str.contains("I"))
+                df_filter = df_filter.filter(~frame_str.str.contains("Q"))
 
-            df_filter = df_filter.filter(pl.col("fp").str.contains("FY"))
-            df_filter = df_filter.with_columns([pl.col("frame").str.extract(r"(\d+)", 1).cast(pl.Int32).alias("FY")])
+            df_filter = df_filter.filter(fp_str.str.contains("FY"))
+            df_filter = df_filter.with_columns([frame_str.str.extract(r"(\d+)", 1).cast(pl.Int32).alias("FY")])
             last_fy = df_filter["FY"].max()
 
             # ---
@@ -205,7 +207,7 @@ class SecApi:
 
     @weak_lru(maxsize=10)
     def get_taxonomy(self):
-        json_request = self.sec_company_facts
+        json_request = self.get_company_facts()
 
         facts = json_request.get('facts', {})
 
@@ -220,7 +222,7 @@ class SecApi:
 
     @weak_lru(maxsize=10)
     def get_currency(self):
-        json_request = self.sec_company_facts
+        json_request = self.get_company_facts()
 
         facts = json_request.get('facts', {})
 
@@ -254,7 +256,7 @@ class SecApi:
 
     @weak_lru(maxsize=10)
     def get_sec_data(self):
-        json_request = self.sec_company_facts
+        json_request = self.get_company_facts()
 
         facts = json_request.get('facts', {})
 
@@ -292,16 +294,31 @@ class SecApi:
 
         main_currency = self.get_currency()
         df = pl.DataFrame(records)
-        df = df.filter(pl.col("unit").is_in(["shares", main_currency]))
+        df = df.filter(pl.col("unit").cast(pl.Utf8).is_in(["shares", main_currency]))
 
         df = map_missing_frames(df)
         df = convert_to_quarters(df)
+
+        df = df.unique()
+
+        df = df.with_columns([
+            pl.col("quarter_val").cast(pl.Float64),
+            pl.col("val").cast(pl.Float64),
+            pl.col("key").cast(pl.Categorical),
+            pl.col("unit").cast(pl.Categorical),
+            pl.col("frame").cast(pl.Categorical),
+            pl.col("frame_map").cast(pl.Categorical),
+            pl.col("form").cast(pl.Categorical),
+            pl.col("fp").cast(pl.Categorical)
+        ])
+
+        buf = df.write_ipc(None, compression="zstd")
 
         return df
 
     @weak_lru(maxsize=10)
     def get_sector(self):
-        json_request = self.sec_submissions
+        json_request = self.get_company_submissions()
 
         sector = json_request['sicDescription']
 
@@ -309,7 +326,7 @@ class SecApi:
 
     @weak_lru(maxsize=10)
     def get_year_end(self):
-        json_request = self.sec_submissions
+        json_request = self.get_company_submissions()
 
         year_end = json_request['fiscalYearEnd']
         year_end = datetime.strptime(year_end, "%m%d")
@@ -319,7 +336,7 @@ class SecApi:
 
     @weak_lru(maxsize=10)
     def get_filings(self):
-        json_request = self.sec_submissions
+        json_request = self.get_company_submissions()
 
         df_filings = pl.DataFrame(json_request['filings']['recent'])
 
@@ -327,7 +344,7 @@ class SecApi:
 
     @weak_lru(maxsize=10)
     def get_dei(self):
-        json_request = self.sec_company_facts
+        json_request = self.get_company_facts()
 
         facts = json_request.get('facts', {})
         dei = facts.get('dei', {})
@@ -352,19 +369,19 @@ class SecApi:
             df_shares = pl.DataFrame(shares)
 
             try:
-                df_shares_i = df_shares.filter(pl.col("frame").is_in([inst_lookup_val]))
+                df_shares_i = df_shares.filter(pl.col("frame").cast(pl.Utf8).is_in([inst_lookup_val]))
                 shares = df_shares_i.item(0,'val')
 
             except (IndexError, KeyError):
-                df_shares_i = df_shares.filter(pl.col("frame").is_in([inst_lookup_val_prev]))
+                df_shares_i = df_shares.filter(pl.col("frame").cast(pl.Utf8).is_in([inst_lookup_val_prev]))
                 shares = df_shares_i.item(0,'val')
 
             return shares
 
         except (IndexError, KeyError):
             try:
-                df_shares = self.sec_data.filter(pl.col("key").is_in(["CommonStockSharesOutstanding", 'WeightedAverageNumberOfSharesOutstandingBasic']))
-                df_shares_i = df_shares.filter(pl.col("frame").is_in([inst_lookup_val_prev]))
+                df_shares = self.sec_data.filter(pl.col("key").cast(pl.Utf8).is_in(["CommonStockSharesOutstanding", 'WeightedAverageNumberOfSharesOutstandingBasic']))
+                df_shares_i = df_shares.filter(pl.col("frame").cast(pl.Utf8).is_in([inst_lookup_val_prev]))
                 shares = df_shares_i.item(0, 'val')
 
                 return shares
@@ -376,10 +393,21 @@ class SecApi:
     @weak_lru(maxsize=10)
     def get_annual_quarter(self):
 
-        df_filter = self.sec_data.filter(pl.col("form").is_in(["10-K", "8-K", "6-K", "20-F", "40-F", "6-F"]))
-        df_filter = df_filter.filter(pl.col("frame").str.contains("I"))
-        df_filter = df_filter.filter(pl.col("fp").str.contains("FY"))
-        df_filter = df_filter.with_columns(pl.col("frame").str.extract(r"Q(\d)").alias("quarter"))
+        df_filter = self.sec_data.filter(pl.col("form").cast(pl.Utf8).is_in(["10-K", "8-K", "6-K", "20-F", "40-F", "6-F"]))
+
+        frame_str = pl.col("frame").cast(pl.Utf8)
+
+        df_filter = (
+            df_filter
+            .filter(frame_str.str.contains("I"))  # filter frame containing "I"
+            .filter(pl.col("fp").cast(pl.Utf8).str.contains("FY"))  # fp contains "FY"
+            .with_columns(
+                frame_str.str.extract(r"Q(\d)").alias("quarter")  # extract quarter
+            )
+        )
+
+        # Cast 'quarter' back to categorical to save memory
+        df_filter = df_filter.with_columns(pl.col("quarter").cast(pl.Categorical))
 
         return df_filter.select(pl.col("quarter").cast(pl.Int64).mode())[0, 0]
 
@@ -393,7 +421,8 @@ class SecApi:
         dur_lookup_val = f"CY{year}" if quarter is None else f"CY{year}Q{quarter}"
         inst_lookup_val = f"CY{year}Q{annual_quarter}I" if quarter is None else f"CY{year}Q{quarter}I"
 
-        data = self.sec_data.filter(pl.col("frame_map").is_in([dur_lookup_val, inst_lookup_val]))
+        data = self.sec_data.filter(pl.col("frame_map").cast(pl.Utf8).is_in([dur_lookup_val, inst_lookup_val]))
+
         data = data.unique()
 
         return data

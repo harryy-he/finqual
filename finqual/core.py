@@ -288,7 +288,7 @@ class Finqual:
                 data = self.cash_flow(curr_year, curr_quarter)[:,1]
 
             if (data == 0).all():   # Checking that it is not all 0's
-                print(f"No data for ASML {curr_year}Q{curr_quarter}.")
+                print(f"No data for {self.ticker} {curr_year}Q{curr_quarter}.")
 
                 df_annual_quarter = pl.DataFrame({
                     "line_item": fy_result[:, 0],
@@ -825,7 +825,7 @@ class Finqual:
             'Gross Margin': lambda data: data['income'].get('Gross Profit') / data['income'].get('Total Revenue'),
             'ROA': lambda data: data['income'].get('Net Income') / data['balance'].get('Total Assets'),
             'ROE': lambda data: data['income'].get('Net Income') / data['balance'].get('Stockholders Equity'),
-            'ROIC': lambda data: data['income'].get('Operating Income') * (1 - (data['income'].get('Tax Provision', 0) / data['income'].get('Pretax Income'))) / (data['balance'].get('Current Assets') - data['balance'].get('Current Liabilities') + data['balance'].get('Net PPE') + data['balance'].get('Goodwill')),
+            'ROIC': lambda data: data['income'].get('Operating Income') * (1 - (data['income'].get('Tax Provision', 0) / data['income'].get('Pretax Income'))) / (data['balance'].get('Total Assets') - data['balance'].get('Other Short Term Investments') - data['balance'].get('Accounts Payable') - data['balance'].get('Other Current Liabilities')),
         }
 
         statement_fetchers = {
