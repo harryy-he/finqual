@@ -278,13 +278,27 @@ class Finqual:
 
         # --- Collect quarterly results
         quarterly_results = []
+        data = 0
 
         for curr_year, curr_quarter in quarter_list:
             if "".join(label_type) == "income_statement":
-                quarterly_results.append(self.income_stmt(curr_year, curr_quarter)[:,1])
+                data = self.income_stmt(curr_year, curr_quarter)[:,1]
 
             elif "".join(label_type) == "cash_flow":
-                quarterly_results.append(self.cash_flow(curr_year, curr_quarter)[:,1])
+                data = self.cash_flow(curr_year, curr_quarter)[:,1]
+
+            if (data == 0).all():   # Checking that it is not all 0's
+                print(f"No data for ASML {curr_year}Q{curr_quarter}.")
+
+                df_annual_quarter = pl.DataFrame({
+                    "line_item": fy_result[:, 0],
+                    "value": 0,
+                    "total_prob": 1
+                })
+
+                return df_annual_quarter
+
+            quarterly_results.append(data)
 
         quarterly_sum = sum(quarterly_results)
 
@@ -669,9 +683,12 @@ class Finqual:
         if df_inc.width < 4:
             print(f"Not enough data to calculate income TTM for {self.ticker}")
 
+            df_inc = self.income_stmt_period(current_year - 2, current_year + 2)
+            line_items = df_inc.select(pl.col(df_inc.columns[0]))
+
             df_ttm = pl.DataFrame({
                 self.ticker: line_items,
-                "TTM": np.nan,
+                "TTM": df_inc.select(pl.col(df_inc.columns[1])),
             })
 
             return df_ttm
@@ -721,9 +738,12 @@ class Finqual:
         if df_cf.width <= 4:
             print(f"Not enough data to calculate cashflow TTM for {self.ticker}")
 
+            df_cf = self.cash_flow_period(current_year - 2, current_year + 2)
+            line_items = df_cf.select(pl.col(df_cf.columns[0]))
+
             df_ttm = pl.DataFrame({
                 self.ticker: line_items,
-                "TTM": np.nan,
+                "TTM": df_cf.select(pl.col(df_cf.columns[1])),
             })
 
             return df_ttm
