@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="finqual",  # This must be unique on PyPI
-    version="4.3.0",
+    version="4.4.0",
     author="Harry",
     description="A Python package to help investors to conduct financial research, analysis and comparable company analysis.",
     long_description=open("README.md", encoding="utf-8").read(),
@@ -24,6 +24,7 @@ setup(
                       "ratelimit>=2.2.1",
                       "matplotlib>=3.8.0",
                       "pyarrow>=12.0.0",
+                      "ijson>=3.4.0",
                       ]
 )
 

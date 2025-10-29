@@ -204,7 +204,7 @@ class Finqual:
         self.trees = self.select_tree()
         self.labels = self.select_label()
 
-        self.sector = self.sec_edgar.get_sector()
+        self.sector = self.sec_edgar.sector
 
     @staticmethod
     def load_trees(file_name: str) -> dict:
