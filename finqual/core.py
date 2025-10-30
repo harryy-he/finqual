@@ -318,14 +318,12 @@ class Finqual:
             })
 
         elif "".join(label_type) == "cash_flow":
-            beginning_cash = self.cash_flow(quarter_list[0][0], quarter_list[0][1])[4,1]
-            end_cash = fy_result[5,1]
+            end_cash = fy_result[4,1]
 
             fy_series = fy_result[:, 1]
             annual_quarter = fy_series - quarterly_sum
 
-            annual_quarter[4] = beginning_cash
-            annual_quarter[5] = end_cash
+            annual_quarter[4] = end_cash
 
             # Put it back into a dataframe with line items
             df_annual_quarter = pl.DataFrame({
@@ -536,8 +534,7 @@ class Finqual:
             "Investing Cash Flow",
             
             "Financing Cash Flow",
-            "Beginning Cash Position", "End Cash Position",
-            "Changes In Cash",
+            "End Cash Position",
         ]
 
         df_cf = self._process_financials(
@@ -546,12 +543,6 @@ class Finqual:
             period_type=tuple(["duration", "instant"]),
             target_yf_list=tuple(cashflow_list),
         )
-
-        rules = [
-            build_rule("End Cash Position = Beginning Cash Position + Changes In Cash"),
-        ]
-
-        df_cf, log = triangulate_smart(df_cf, rules)
 
         label = str(year) if quarter is None else f"{year}Q{quarter}"
         df_cf = df_cf.rename({"value": label,"line_item": self.ticker})
@@ -751,9 +742,7 @@ class Finqual:
         df_ttm = df_cf.select(pl.col(df_cf.columns[1:5]))
         ttm = sum(df_ttm)
 
-        beginning_cash = df_ttm[4,3]
-        end_cash = df_ttm[5,0]
-        chg_cash = end_cash - beginning_cash
+        end_cash = df_ttm[4,0]
 
         df_ttm = pl.DataFrame({
             self.ticker: line_items,
@@ -762,9 +751,7 @@ class Finqual:
 
         # --- Adjust specific line items
 
-        df_ttm[4,1] = beginning_cash
-        df_ttm[5,1] = end_cash
-        df_ttm[6,1] = chg_cash
+        df_ttm[4,1] = end_cash
 
         return df_ttm
 

@@ -129,13 +129,21 @@ class SecApi:
 
         self.cik = self.get_cik_code()
 
-        self.sec_data = self.process_company_facts()[0]
-        self.taxonomy = self.process_company_facts()[1]
-        self.currency = self.process_company_facts()[2]
-        self.dei = self.process_company_facts()[3]
+        facts_data = self.process_company_facts()
 
-        self.latest_10k = self.process_company_submissions()[0]
-        self.sector = self.process_company_submissions()[1]
+        self.sec_data = facts_data[0]
+        self.taxonomy = facts_data[1]
+        self.currency = facts_data[2]
+        self.dei = facts_data[3]
+
+        del facts_data
+
+        submissions_data = self.process_company_submissions()
+
+        self.latest_10k = submissions_data[0]
+        self.sector = submissions_data[1]
+
+        del submissions_data
 
     # --- Company Facts
 
