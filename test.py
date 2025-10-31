@@ -12,7 +12,7 @@ for ticker in tickers:
 
     # Financial Statements
     df_inc = fq_ticker.income_stmt(year=start, quarter=quarter).to_pandas()  # Get annual income statements for end
-    df_bs = fq_ticker.balance_sheet(year=start, quarter=quarter).to_pandas()  # Get quarterly balance sheet for end and quarter
+    df_bs = fq_ticker.balance_sheet(year=start).to_pandas()  # Get quarterly balance sheet for end and quarter
     df_cf = fq_ticker.cash_flow(year=start, quarter=quarter).to_pandas()  # Get annual cash flow statements for start
 
     # TTM
@@ -22,7 +22,7 @@ for ticker in tickers:
 
     # Period Data
     df_inc_p = fq_ticker.income_stmt_period(start_year=start, end_year=end).to_pandas()  # Add '_period' to the end of the function and define the start and end to retrieve the income statement over the period
-    df_bs_p = fq_ticker.balance_sheet_period(start_year=start, end_year=end).to_pandas()
+    df_bs_p = fq_ticker.balance_sheet_period(start_year=start, end_year=end, quarter=False).to_pandas()
     df_cf_p = fq_ticker.cash_flow_period(start_year=start, end_year=end).to_pandas()  # Add 'quarter=True' to retrieve the quarterly information over that time period
 
     df_inc_pq = fq_ticker.income_stmt_period(start_year=start, end_year=end, quarter=True).to_pandas()  # Add '_period' to the end of the function and define the start and end to retrieve the income statement over the period

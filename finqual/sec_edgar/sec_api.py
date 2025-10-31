@@ -338,7 +338,7 @@ class SecApi:
         # Cast 'quarter' back to categorical to save memory
         df_filter = df_filter.with_columns(pl.col("quarter").cast(pl.Categorical))
 
-        return df_filter.select(pl.col("quarter").cast(pl.Int64).mode())[0, 0]
+        return int(df_filter.select(pl.col("quarter").mode())[0, 0])
 
     @weak_lru(maxsize=10)
     def get_shares(self, year: int, quarter: int|None = None) -> int|None:
