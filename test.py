@@ -1,7 +1,7 @@
 import finqual as fq
 
 tickers = ["NVDA", "ASML", "MSFT", "AAPL"]  # You can add more tickers if needed
-start = 2024
+start = 2020
 end = 2025
 quarter = 3  # For quarterly data
 
@@ -21,8 +21,13 @@ for ticker in tickers:
     df_cf_ttm = fq_ticker.cash_flow_ttm().to_pandas()  # Get annual income statements for end
 
     # Period Data
-    df_incp = fq_ticker.income_stmt_period(start_year=start, end_year=end, quarter=True).to_pandas()  # Add '_period' to the end of the function and define the start and end to retrieve the income statement over the period
-    df_cfp = fq_ticker.cash_flow_period(start_year=start, end_year=end, quarter=True).to_pandas()  # Add 'quarter=True' to retrieve the quarterly information over that time period
+    df_inc_p = fq_ticker.income_stmt_period(start_year=start, end_year=end).to_pandas()  # Add '_period' to the end of the function and define the start and end to retrieve the income statement over the period
+    df_bs_p = fq_ticker.balance_sheet_period(start_year=start, end_year=end).to_pandas()
+    df_cf_p = fq_ticker.cash_flow_period(start_year=start, end_year=end).to_pandas()  # Add 'quarter=True' to retrieve the quarterly information over that time period
+
+    df_inc_pq = fq_ticker.income_stmt_period(start_year=start, end_year=end, quarter=True).to_pandas()  # Add '_period' to the end of the function and define the start and end to retrieve the income statement over the period
+    df_bs_pq = fq_ticker.balance_sheet_period(start_year=start, end_year=end,quarter=True).to_pandas()
+    df_cf_pq = fq_ticker.cash_flow_period(start_year=start, end_year=end, quarter=True).to_pandas()
 
     # Ratios
     df_p = fq_ticker.profitability_ratios(year=start).to_pandas()  # Get selected profitability ratios for START_YEAR (e.g. Operating Margin, Gross Margin, ROE, ROA, ROIC etc)
