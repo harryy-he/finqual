@@ -127,7 +127,12 @@ class SecApi:
                         'Accept-Encoding': 'gzip, deflate',
                         }
 
-        self.cik = self.get_cik_code()
+        id_data = self.get_id_code()
+
+        self.cik = id_data[0]
+        self.name = id_data[1]
+
+        del id_data
 
         facts_data = self.process_company_facts()
 
@@ -227,7 +232,7 @@ class SecApi:
     # --- CIK code
 
     @weak_lru(maxsize=10)
-    def get_cik_code(self):
+    def get_id_code(self):
 
         url = "https://www.sec.gov/files/company_tickers_exchange.json"
 
@@ -237,9 +242,9 @@ class SecApi:
 
             # Each item in the JSON array is like: [cik, title, ticker, exchange]
             for item in ijson.items(text_stream, "data.item"):
-                cik, title, ticker, exchange = item
+                cik, name, ticker, exchange = item
                 if ticker.lower() == self.ticker.lower():
-                    return str(cik).zfill(10)
+                    return str(cik).zfill(10), name
 
     # --- Company submissions
 
