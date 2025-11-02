@@ -804,7 +804,22 @@ class Finqual:
                 result[ratio] = np.nan
             return result
 
-    def profitability_ratios(self, year: int, quarter: int | None = None):
+    def profitability_ratios(self, year: int|None = None, quarter: int | None = None):
+
+        if year is None and quarter is None:
+
+            statement_fetchers = {
+                'income': lambda y, q=None: self.income_stmt_ttm(),
+                'balance': lambda y, q=None: self.balance_sheet_ttm(),
+            }
+
+        else:
+
+            statement_fetchers = {
+                'income': lambda y, q=None: self.income_stmt(y, q) if q else self.income_stmt(y),
+                'balance': lambda y, q=None: self.balance_sheet(y, q) if q else self.balance_sheet(y),
+            }
+
         ratio_definitions = {
             'SG&A Ratio': lambda data: data['income'].get('Selling General And Administration') / data['income'].get('Total Revenue'),
             'R&D Ratio': lambda data: data['income'].get('Research And Development') / data['income'].get('Total Revenue'),
@@ -815,11 +830,6 @@ class Finqual:
             'ROIC': lambda data: data['income'].get('Operating Income') * (1 - (data['income'].get('Tax Provision', 0) / data['income'].get('Pretax Income'))) / (data['balance'].get('Total Assets') - data['balance'].get('Other Short Term Investments') - data['balance'].get('Accounts Payable') - data['balance'].get('Other Current Liabilities')),
         }
 
-        statement_fetchers = {
-            'income': lambda y, q=None: self.income_stmt(y, q) if q else self.income_stmt(y),
-            'balance': lambda y, q=None: self.balance_sheet(y, q) if q else self.balance_sheet(y),
-        }
-
         ratios = self._get_ratios(year, ratio_definitions, statement_fetchers, quarter, True)
 
         df_ratio = pl.DataFrame([ratios])
@@ -827,15 +837,23 @@ class Finqual:
 
         return df_ratio
 
-    def liquidity_ratios(self, year: int, quarter: int | None = None):
+    def liquidity_ratios(self, year: int|None = None, quarter: int | None = None):
+
+        if year is None and quarter is None:
+
+            statement_fetchers = {
+                'balance': lambda y, q=None: self.balance_sheet_ttm(),
+            }
+
+        else:
+            statement_fetchers = {
+                'balance': lambda y, q=None: self.balance_sheet(y, q) if q else self.balance_sheet(y),
+            }
+
         ratio_definitions = {
             'Current Ratio': lambda data: data['balance'].get('Current Assets') / data['balance'].get('Current Liabilities'),
             'Quick Ratio': lambda data: (data['balance'].get('Current Assets') - data['balance'].get('Inventory')) / data['balance'].get('Current Liabilities'),
             'Debt-to-Equity Ratio': lambda data: data['balance'].get('Total Liabilities Net Minority Interest') / data['balance'].get('Stockholders Equity'),
-        }
-
-        statement_fetchers = {
-            'balance': lambda y, q=None: self.balance_sheet(y, q) if q else self.balance_sheet(y),
         }
 
         ratios = self._get_ratios(year, ratio_definitions, statement_fetchers, quarter, False)

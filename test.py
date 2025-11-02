@@ -1,6 +1,6 @@
 import finqual as fq
 
-tickers = ["NVDA", "ASML", "MSFT", "AAPL"]  # You can add more tickers if needed
+tickers = ["NVDA"]#, "ASML", "MSFT", "AAPL"]  # You can add more tickers if needed
 start = 2020
 end = 2025
 quarter = 3  # For quarterly data
@@ -33,7 +33,12 @@ for ticker in tickers:
     df_p = fq_ticker.profitability_ratios(year=start).to_pandas()  # Get selected profitability ratios for START_YEAR (e.g. Operating Margin, Gross Margin, ROE, ROA, ROIC etc)
     df_l = fq_ticker.liquidity_ratios(year=start).to_pandas()  # Get selected liquidity ratios for START_YEAR (e.g. D/E, Current, Quick Ratio)
     df_v = fq_ticker.valuation_ratios().to_pandas() # Get selected valuation ratios for START_YEAR (e.g. P/E, EV/EBITDA, EPS etc)
+
+    df_p_ttm = fq_ticker.profitability_ratios().to_pandas()  # Get selected profitability ratios for START_YEAR (e.g. Operating Margin, Gross Margin, ROE, ROA, ROIC etc)
+    df_l_ttm = fq_ticker.liquidity_ratios().to_pandas()  # Get selected liquidity ratios for START_YEAR (e.g. D/E, Current, Quick Ratio)
+
     df_pp = fq_ticker.profitability_ratios_period(start_year=start, end_year=end).to_pandas()
+
     # -----------------------------------------------------------------------
 
     # Comparable Company Data
