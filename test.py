@@ -44,7 +44,7 @@ for ticker in tickers:
     # Comparable Company Data
 
     df_cca = fq_cca.get_c()  # Get comparable companies that are in the same sector and most similar in market capitalisation to ticker
-    df_cc_l = fq_cca.liquidity_ratios(year=start).to_pandas()  # Similar to before, but retrieve the liquidity ratios for ticker and its competitors for start
+    df_cc_l = fq_cca.liquidity_ratios().to_pandas()  # Similar to before, but retrieve the liquidity ratios for ticker and its competitors for start
     df_cc_pp = fq_cca.profitability_ratios_period(start_year=start, end_year=end).to_pandas()
     df_cc_v = fq_cca.valuation_ratios().to_pandas()  # Retrieve the latest valuation ratios for ticker and its competitors
 

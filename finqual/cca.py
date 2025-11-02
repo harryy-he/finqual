@@ -129,11 +129,11 @@ class CCA:
         return df
 
     @weak_lru(maxsize=10)
-    def profitability_ratios(self, year: int, quarter: int | None = None, n: int|None = None):
+    def profitability_ratios(self, year: int | None = None, quarter: int | None = None, n: int|None = None):
         return self._get_ratios(year, 'profitability_ratios', quarter, n)
 
     @weak_lru(maxsize=10)
-    def liquidity_ratios(self, year: int, quarter: int | None = None, n: int|None = None):
+    def liquidity_ratios(self, year: int | None = None, quarter: int | None = None, n: int|None = None):
         return self._get_ratios(year, 'liquidity_ratios', quarter, n)
 
     @weak_lru(maxsize=10)
