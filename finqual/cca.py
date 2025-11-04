@@ -3,6 +3,7 @@ import polars as pl
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import functools
 import weakref
+import gc
 
 def weak_lru(maxsize=128, typed=False):
     """LRU Cache decorator that keeps a weak reference to 'self'"""
@@ -56,77 +57,86 @@ class CCA:
 
     def _get_ratios(self, year: int | None, method_name: str, quarter: int | None = None, n: int|None = None):
 
-        def fetch_ratios(ticker: str, year_f: int | None, method_name_f: str, quarter_f: int | None):
+        def fetch_ratios(ticker: str):
             fq_instance = Finqual(ticker)
-            func = getattr(fq_instance, method_name_f)
-            return func(year_f, quarter_f)
+            func = getattr(fq_instance, method_name)
+            df = func(year, quarter)
+            if df is not None and len(df) > 0:
+                df = df.with_columns(pl.lit(ticker).alias("Ticker"))
+            del fq_instance
+            gc.collect()
+            return df
 
         tickers = self.get_c(n)
-        results = []
+        lazy_frames = []
 
-        with ThreadPoolExecutor() as executor:
-            futures = {executor.submit(fetch_ratios, ticker, year, method_name, quarter): ticker for ticker in tickers}
+        # Limit thread count for memory balance (I/O-bound, so 4–8 threads is plenty)
+        max_workers = min(8, len(tickers))
+
+        # --- Collecting tickers
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {executor.submit(fetch_ratios, ticker): ticker for ticker
+                       in tickers}
             for future in as_completed(futures):
-                result = future.result()
-                results.append(result)
+                df = future.result()
+                if df is not None and len(df) > 0:
+                    lazy_frames.append(df.lazy())
+                del df
+                gc.collect()
 
-        if not results:
+        if not lazy_frames:
             return pl.DataFrame()
 
-        df = pl.concat(results)
-
-        # --- Ticker mapping
-
-        ticker_order_expr = pl.when(pl.col("Ticker") == tickers[0]).then(0)
-
-        for i, ticker in enumerate(tickers[1:], start=1):
-            ticker_order_expr = ticker_order_expr.when(pl.col("Ticker") == ticker).then(i)
-
-        ticker_order_expr = ticker_order_expr.otherwise(len(tickers)).alias("Ticker_order")
-        df = df.with_columns(ticker_order_expr)
+        df = pl.concat([lf.collect(streaming=True) for lf in lazy_frames], rechunk=True)
 
         # --- Sorting
 
-        df = df.sort(["Period", "Ticker_order"],descending=[True, False]).drop("Ticker_order")
+        ticker_df = pl.DataFrame({"Ticker": tickers, "Ticker_order": list(range(len(tickers)))})
+        df = df.join(ticker_df, on="Ticker", how="left")
+        df = df.sort(["Period", "Ticker_order"], descending=[True, False])
 
-        return df
+        return df.drop("Ticker_order")
 
     def _get_ratios_period(self, start_year: int, end_year: int, method_name: str, quarter: bool = False, n: int|None = None):
 
-        def fetch_ratios(ticker: str, start_year_f: int, end_year_f: int, method_name_f: str, quarter_f: bool):
+        def fetch_ratios(ticker: str):
             fq_instance = Finqual(ticker)
-            func = getattr(fq_instance, method_name_f)
-            return func(start_year_f, end_year_f, quarter_f)
+            func = getattr(fq_instance, method_name)
+            df = func(start_year, end_year, quarter)
+            df = df.with_columns(pl.lit(ticker).alias("Ticker"))
+            del fq_instance
+            gc.collect()
+            return df
 
         tickers = self.get_c(n)
-        results = []
+        lazy_frames = []
 
-        with ThreadPoolExecutor() as executor:
-            futures = {executor.submit(fetch_ratios, ticker, start_year, end_year, method_name, quarter): ticker for ticker in tickers}
+        max_workers = min(8, len(tickers))
+
+        # --- Collecting tickers
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {executor.submit(fetch_ratios, ticker): ticker for ticker in tickers}
             for future in as_completed(futures):
-                result = future.result()
-                results.append(result)
+                df = future.result()
+                if df is not None and len(df) > 0:
+                    lazy_frames.append(df.lazy())
+                del df
+                gc.collect()
 
-        if not results:
+        if not lazy_frames:
             return pl.DataFrame()
 
-        df = pl.concat(results)
-
-        # --- Ticker mapping
-
-        ticker_order_expr = pl.when(pl.col("Ticker") == tickers[0]).then(0)
-
-        for i, ticker in enumerate(tickers[1:], start=1):
-            ticker_order_expr = ticker_order_expr.when(pl.col("Ticker") == ticker).then(i)
-
-        ticker_order_expr = ticker_order_expr.otherwise(len(tickers)).alias("Ticker_order")
-        df = df.with_columns(ticker_order_expr)
+        df = pl.concat([lf.collect(streaming=True) for lf in lazy_frames], rechunk=True)
 
         # --- Sorting
 
-        df = df.sort(["Period", "Ticker_order"], descending=[True, False]).drop("Ticker_order")
+        ticker_df = pl.DataFrame({"Ticker": tickers, "Ticker_order": list(range(len(tickers)))})
+        df = df.join(ticker_df, on="Ticker", how="left")
+        df = df.sort(["Period", "Ticker_order"], descending=[True, False])
 
-        return df
+        return df.drop("Ticker_order")
 
     @weak_lru(maxsize=10)
     def profitability_ratios(self, year: int | None = None, quarter: int | None = None, n: int|None = None):
