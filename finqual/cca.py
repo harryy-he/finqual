@@ -29,7 +29,7 @@ class CCA:
         self.sectors = self.fq_ticker.load_label("sector_mapping.parquet")
 
     @weak_lru(maxsize=10)
-    def get_c(self, n: int|None = None):
+    def get_c(self, n: int | None = None):
 
         df_c = self.sectors.filter(pl.col('sector') == self.sector)
         match_indices = df_c.select((pl.col('ticker') == self.ticker).arg_true()).to_series().to_list()
@@ -55,17 +55,17 @@ class CCA:
 
         print("No comparable companies found.")
 
-    def _get_ratios(self, year: int | None, method_name: str, quarter: int | None = None, n: int|None = None):
+    def _get_ratios(self, year: int | None, method_name: str, quarter: int | None = None, n: int | None = None):
 
         def fetch_ratios(ticker: str):
             fq_instance = Finqual(ticker)
             func = getattr(fq_instance, method_name)
-            df = func(year, quarter)
-            if df is not None and len(df) > 0:
-                df = df.with_columns(pl.lit(ticker).alias("Ticker"))
+            df_ratio = func(year, quarter)
+            if df_ratio is not None and len(df_ratio) > 0:
+                df_ratio = df_ratio.with_columns(pl.lit(ticker).alias("Ticker"))
             del fq_instance
             gc.collect()
-            return df
+            return df_ratio
 
         tickers = self.get_c(n)
         lazy_frames = []
@@ -95,16 +95,16 @@ class CCA:
 
         return df.drop("Ticker_order")
 
-    def _get_ratios_period(self, start_year: int, end_year: int, method_name: str, quarter: bool = False, n: int|None = None):
+    def _get_ratios_period(self, start_year: int, end_year: int, method_name: str, quarter: bool = False, n: int | None = None):
 
         def fetch_ratios(ticker: str):
             fq_instance = Finqual(ticker)
             func = getattr(fq_instance, method_name)
-            df = func(start_year, end_year, quarter)
-            df = df.with_columns(pl.lit(ticker).alias("Ticker"))
+            df_ratio = func(start_year, end_year, quarter)
+            df_ratio = df_ratio.with_columns(pl.lit(ticker).alias("Ticker"))
             del fq_instance
             gc.collect()
-            return df
+            return df_ratio
 
         tickers = self.get_c(n)
         lazy_frames = []
@@ -134,25 +134,25 @@ class CCA:
         return df.drop("Ticker_order")
 
     @weak_lru(maxsize=10)
-    def profitability_ratios(self, year: int | None = None, quarter: int | None = None, n: int|None = None):
+    def profitability_ratios(self, year: int | None = None, quarter: int | None = None, n: int | None = None):
         return self._get_ratios(year, 'profitability_ratios', quarter, n)
 
     @weak_lru(maxsize=10)
-    def liquidity_ratios(self, year: int | None = None, quarter: int | None = None, n: int|None = None):
+    def liquidity_ratios(self, year: int | None = None, quarter: int | None = None, n: int | None = None):
         return self._get_ratios(year, 'liquidity_ratios', quarter, n)
 
     @weak_lru(maxsize=10)
-    def valuation_ratios(self, year: int | None = None, quarter: int | None = None, n: int|None = None):
+    def valuation_ratios(self, year: int | None = None, quarter: int | None = None, n: int | None = None):
         return self._get_ratios(year, 'valuation_ratios', quarter, n)
 
     @weak_lru(maxsize=10)
-    def profitability_ratios_period(self, start_year: int, end_year: int, quarter: bool = False, n: int|None = None):
+    def profitability_ratios_period(self, start_year: int, end_year: int, quarter: bool = False, n: int | None = None):
         return self._get_ratios_period(start_year, end_year, 'profitability_ratios_period', quarter, n)
 
     @weak_lru(maxsize=10)
-    def liquidity_ratios_period(self, start_year: int, end_year: int, quarter: bool = False, n: int|None = None):
+    def liquidity_ratios_period(self, start_year: int, end_year: int, quarter: bool = False, n: int | None = None):
         return self._get_ratios_period(start_year, end_year, 'liquidity_ratios_period', quarter, n)
 
     @weak_lru(maxsize=10)
-    def valuation_ratios_period(self, start_year: int, end_year: int, quarter: bool = False, n: int|None = None):
+    def valuation_ratios_period(self, start_year: int, end_year: int, quarter: bool = False, n: int | None = None):
         return self._get_ratios_period(start_year, end_year, 'valuation_ratios_period', quarter, n)

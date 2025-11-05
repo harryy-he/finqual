@@ -1,6 +1,5 @@
 import requests
 import polars as pl
-from datetime import datetime
 import functools
 import weakref
 from ratelimit import limits
@@ -48,7 +47,7 @@ def map_missing_frames(df: pl.DataFrame) -> pl.DataFrame:
     # Remove any I's from "frame_map" col
     df_filled = df_filled.with_columns([
          pl.col("frame_map").str.replace("I", "")
-        .alias("frame_map")
+         .alias("frame_map")
     ])
 
     # Add back any I's for when "start" col is "None"
@@ -231,7 +230,7 @@ class SecApi:
 
     # --- CIK code
 
-    @weak_lru(maxsize=10)
+    @weak_lru(maxsize=4)
     def get_id_code(self):
 
         url = "https://www.sec.gov/files/company_tickers_exchange.json"
@@ -248,7 +247,6 @@ class SecApi:
 
     # --- Company submissions
 
-    @weak_lru(maxsize=10)
     @limits(calls=10, period=1)
     def process_company_submissions(self):
 
@@ -275,78 +273,28 @@ class SecApi:
 
         return latest_10k, sector
 
-    # TODO: Remove/deprecate
-    # @weak_lru(maxsize=10)
-    # @limits(calls=10, period=1)
-    # def get_company_submissions(self):
-    #     url = 'https://data.sec.gov/submissions/CIK' + self.cik + '.json'
-    #     response = requests.get(url, headers=self.headers)
-    #     json_request = response.json()
-    #
-    #     return json_request
-    #
-    # @weak_lru(maxsize=10)
-    # def get_latest_10k(self):
-    #
-    #     df = pl.DataFrame(self.get_company_submissions()['filings']['recent'])
-    #     df = df.filter(pl.col("primaryDocDescription").is_in(["10-K", "20-F"])).head(1)
-    #
-    #     if len(df) > 0:
-    #         report_date = df['reportDate'][0]
-    #         year = int(report_date[:4])
-    #         return year
-    #
-    #     else:
-    #         return None
-    #
-    # @weak_lru(maxsize=10)
-    # def get_sector(self):
-    #     json_request = self.get_company_submissions()
-    #
-    #     sector = json_request['sicDescription']
-    #
-    #     return sector
-    #
-    # @weak_lru(maxsize=10)
-    # def get_year_end(self):
-    #     json_request = self.get_company_submissions()
-    #
-    #     year_end = json_request['fiscalYearEnd']
-    #     year_end = datetime.strptime(year_end, "%m%d")
-    #     year_end_formatted = year_end.strftime("%B %d")  # "June 30"
-    #
-    #     return year_end_formatted
-    #
-    # @weak_lru(maxsize=10)
-    # def get_filings(self):
-    #     json_request = self.get_company_submissions()
-    #
-    #     df_filings = pl.DataFrame(json_request['filings']['recent'])
-    #
-    #     return df_filings
+    # --- In-class methods (no downloads)
 
-    # ---
-
-    @weak_lru(maxsize=10)
+    @weak_lru(maxsize=4)
     def get_annual_quarter(self):
 
         df_filter = self.sec_data.filter(pl.col("form").cast(pl.Utf8).is_in(["10-K", "8-K", "6-K", "20-F", "40-F", "6-F"]))
         frame_str = pl.col("frame").cast(pl.Utf8)
 
         df_filter = (df_filter
-            .filter(frame_str.str.contains("I"))  # filter frame containing "I"
-            .filter(pl.col("fp").cast(pl.Utf8).str.contains("FY"))  # fp contains "FY"
-            .with_columns(frame_str.str.extract(r"Q(\d)").alias("quarter")  # extract quarter
-            )
-        )
+                     .filter(frame_str.str.contains("I"))  # filter frame containing "I"
+                     .filter(pl.col("fp").cast(pl.Utf8).str.contains("FY"))  # fp contains "FY"
+                     .with_columns(frame_str.str.extract(r"Q(\d)").alias("quarter")  # extract quarter
+                                   )
+                     )
 
         # Cast 'quarter' back to categorical to save memory
         df_filter = df_filter.with_columns(pl.col("quarter").cast(pl.Categorical))
 
         return int(df_filter.select(pl.col("quarter").mode())[0, 0])
 
-    @weak_lru(maxsize=10)
-    def get_shares(self, year: int, quarter: int|None = None) -> int|None:
+    @weak_lru(maxsize=4)
+    def get_shares(self, year: int, quarter: int | None = None) -> int | None:
 
         annual_quarter = self.get_annual_quarter()
 
@@ -367,11 +315,11 @@ class SecApi:
 
             try:
                 df_shares_i = df_shares.filter(pl.col("frame").cast(pl.Utf8).is_in([inst_lookup_val]))
-                shares = df_shares_i.item(0,'val')
+                shares = df_shares_i.item(0, 'val')
 
             except (IndexError, KeyError):
                 df_shares_i = df_shares.filter(pl.col("frame").cast(pl.Utf8).is_in([inst_lookup_val_prev]))
-                shares = df_shares_i.item(0,'val')
+                shares = df_shares_i.item(0, 'val')
 
             return shares
 
@@ -388,7 +336,7 @@ class SecApi:
                 # print(f"*** SecApi: No outstanding share data found for {self.ticker}, returning None.")
                 return None
 
-    @weak_lru(maxsize=10)
+    @weak_lru(maxsize=4)
     def align_fy_year(self, instant: bool):
 
         last_year = self.latest_10k
@@ -408,7 +356,7 @@ class SecApi:
             if instant:
                 df_filter = df_filter.filter(frame_str.str.contains("I"))
             else:
-                df = df.filter(~frame_str.str.contains("I") & ~frame_str.str.contains("Q"))
+                df_filter = df.filter(~frame_str.str.contains("I") & ~frame_str.str.contains("Q"))
 
             df_filter = df_filter.filter(fp_str.str.contains("FY"))
             df_filter = df_filter.with_columns([frame_str.str.extract(r"(\d+)", 1).cast(pl.Int32).alias("FY")])
@@ -420,8 +368,8 @@ class SecApi:
 
             return diff
 
-    @weak_lru(maxsize=10)
-    def financial_data_period(self, year: int, quarter: int|None = None) -> pl.DataFrame:
+    @weak_lru(maxsize=4)
+    def financial_data_period(self, year: int, quarter: int | None = None) -> pl.DataFrame:
 
         annual_quarter = self.get_annual_quarter()
 

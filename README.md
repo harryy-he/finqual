@@ -71,7 +71,7 @@ fq.CCA("NVDA").valuation_ratios() # Similar to before, but retrieve the valuatio
 
 ## Dependencies
 
-Only four external packages are required, with the following versions confirmed to be working:
+Six external packages are required, with the following versions confirmed to be working:
 
 | Package      | Version   |
 |--------------|-----------|
@@ -80,6 +80,7 @@ Only four external packages are required, with the following versions confirmed 
 | cloudscraper | >= 1.2.71 |
 | requests     | >= 2.32.3 |
 | ratelimit    | >= 2.2.1  |
+| ijson        | >= 3.4.0  |
 
 The rest are in-built Python packages such as json, functools and concurrent.futures.
 
@@ -88,6 +89,7 @@ Currently, there are several known limitations that I am aware of from my own te
 
 - Some missing data values for companies, this is mostly due to companies using custom tags that are not accessible via the SEC database (e.g. Broadcom uses their own tag for depreciation and amortisation)
 - Banks, insurers and other financial institutions have a different financial statement profile that has not been mapped yet
+- Companies that are filing under IFRS (e.g. non-US domiciled companies) have less complete data than US-GAAP companies due to less strict taxonomy mappings
 
 ## Contact
 

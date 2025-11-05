@@ -39,6 +39,17 @@ class Node:
             "disclosure": self.disclosure,
         }
 
+    def copy(self):
+        """Return a deep copy of this node and all its descendants."""
+        new_node = Node(self.code)
+        new_node.balance = self.balance
+        new_node.description = self.description
+        new_node.period_type = self.period_type
+        new_node.value = self.value
+        new_node.disclosure = self.disclosure
+        new_node.children = [child.copy() for child in self.children]
+        return new_node
+
     @staticmethod
     def from_dict(data):
         node = Node(data["name"])

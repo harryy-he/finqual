@@ -1,5 +1,4 @@
-import json
-from .node import Node
+
 import polars as pl
 
 class NodeTree:
@@ -35,9 +34,9 @@ class NodeTree:
             if node.code == code:
                 return node
             for child in node.children:
-                result = _find(child)
-                if result:
-                    return result
+                result_ = _find(child)
+                if result_:
+                    return result_
             return None
 
         for root in self.node_tree:

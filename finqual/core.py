@@ -3,7 +3,6 @@ from .node_classes.node import Node
 from .sec_edgar.sec_api import SecApi
 from .stocktwit import StockTwit
 
-import copy
 from datetime import datetime
 import functools
 from importlib.resources import files
@@ -208,14 +207,14 @@ class Finqual:
 
     @staticmethod
     def load_trees(file_name: str) -> dict:
-        path = files("finqual.data") / file_name
+        path = files("finqual.data") / file_name    # TODO: can this be more memory efficient
         with open(path, "r") as f:
             trees_dict = json.load(f)
         return {k: [Node.from_dict(n) for n in v] for k, v in trees_dict.items()}
 
     @staticmethod
     def load_label(file_name: str) -> pl.DataFrame:
-        path = files("finqual.data") / file_name
+        path = files("finqual.data") / file_name    # TODO: can this be more memory efficient
         df_label = pl.read_parquet(path)
         return df_label
 
@@ -258,7 +257,7 @@ class Finqual:
             results.append([fy, q])
         return results
 
-    @weak_lru(maxsize=10)
+    @weak_lru(maxsize=4)
     def _process_annual_quarter(self, year: int, quarter: int, label_type: tuple):
 
         quarter_list = self._previous_quarters(year, quarter)
@@ -277,15 +276,16 @@ class Finqual:
             fy_result = self.cash_flow(year - fy_diff, None)
 
         # --- Collect quarterly results
+
         quarterly_results = []
         data = 0
 
         for curr_year, curr_quarter in quarter_list:
             if "".join(label_type) == "income_statement":
-                data = self.income_stmt(curr_year, curr_quarter)[:,1]
+                data = self.income_stmt(curr_year, curr_quarter)[:, 1]
 
             elif "".join(label_type) == "cash_flow":
-                data = self.cash_flow(curr_year, curr_quarter)[:,1]
+                data = self.cash_flow(curr_year, curr_quarter)[:, 1]
 
             if (data == 0).all():   # Checking that it is not all 0's
                 print(f"No data for {self.ticker} {curr_year}Q{curr_quarter}.")
@@ -302,7 +302,8 @@ class Finqual:
 
         quarterly_sum = sum(quarterly_results)
 
-        # --- Adjust cash flow specifics
+        # --- Subtracting annual values from the sum of the previous three quarters
+
         df_annual_quarter = []
 
         if "".join(label_type) == "income_statement":
@@ -318,12 +319,12 @@ class Finqual:
             })
 
         elif "".join(label_type) == "cash_flow":
-            end_cash = fy_result[4,1]
+            end_cash = fy_result[4, 1]
 
             fy_series = fy_result[:, 1]
             annual_quarter = fy_series - quarterly_sum
 
-            annual_quarter[4] = end_cash
+            annual_quarter[4] = end_cash    # Specific cashflow adjustment as end cash is instantaneous
 
             # Put it back into a dataframe with line items
             df_annual_quarter = pl.DataFrame({
@@ -334,7 +335,7 @@ class Finqual:
 
         return df_annual_quarter
 
-    @weak_lru(maxsize=10)
+    @weak_lru(maxsize=4)
     def _process_financials(self, year: int, quarter: int | None, label_type: tuple,
                             period_type: tuple, target_yf_list: tuple, tolerance: float = 0.4):
 
@@ -352,7 +353,7 @@ class Finqual:
 
             all_dfs = []
             for nodes in self.trees.values():
-                nodes_copy = copy.deepcopy(nodes)  # make a thread-safe copy
+                nodes_copy = [n.copy() for n in nodes]  # make a thread-safe copy
                 tree = NodeTree(nodes_copy)
 
                 tree.load_sec_data(sec_data_dict)
@@ -394,14 +395,14 @@ class Finqual:
             return df_total
 
         else:
-            #print(f"*** Finqual: There is no data available for ticker {self.ticker} for year {year} and/or quarter {quarter} - it may be too newly listed or in the future. \n")
+            # print(f"*** Finqual: There is no data available for ticker {self.ticker} for year {year} and/or quarter {quarter} - it may be too newly listed or in the future. \n")
             df_target = pl.DataFrame({"line_item": target_yf_list})
             df_target = df_target.with_columns(pl.lit(0).alias("value"))
             df_target = df_target.with_columns(pl.lit(0).alias("total_prob"))
 
             return df_target
 
-    @weak_lru(maxsize=10)
+    @weak_lru(maxsize=4)
     def income_stmt(self, year: int, quarter: int | None = None):
 
         income_list = [
@@ -466,7 +467,7 @@ class Finqual:
 
         return df_income
 
-    @weak_lru(maxsize=10)
+    @weak_lru(maxsize=4)
     def balance_sheet(self, year: int, quarter: int | None = None):
         balance_list = [
             "Total Assets",
@@ -523,7 +524,7 @@ class Finqual:
 
         return df_bs
 
-    @weak_lru(maxsize=10)
+    @weak_lru(maxsize=4)
     def cash_flow(self, year: int, quarter: int | None = None):
 
         cashflow_list = [
@@ -545,7 +546,7 @@ class Finqual:
         )
 
         label = str(year) if quarter is None else f"{year}Q{quarter}"
-        df_cf = df_cf.rename({"value": label,"line_item": self.ticker})
+        df_cf = df_cf.rename({"value": label, "line_item": self.ticker})
 
         if "total_prob" in df_cf.columns:
             df_cf = df_cf.drop("total_prob")
@@ -657,6 +658,7 @@ class Finqual:
     def cash_flow_period(self, start_year: int, end_year: int, quarter: bool = False):
         return self._financials_period('cash_flow', start_year, end_year, 'statement', quarter)
 
+    @weak_lru(maxsize=4)
     def income_stmt_ttm(self):
         current_year = int(datetime.now().year)
 
@@ -694,6 +696,7 @@ class Finqual:
 
         return df_ttm
 
+    @weak_lru(maxsize=4)
     def balance_sheet_ttm(self):
         current_year = int(datetime.now().year)
         df_bs = self.balance_sheet_period(current_year - 1, current_year + 1, True)
@@ -720,6 +723,7 @@ class Finqual:
 
         return df_ttm
 
+    @weak_lru(maxsize=4)
     def cash_flow_ttm(self):
         current_year = int(datetime.now().year)
         df_cf = self.cash_flow_period(current_year - 2, current_year + 1, True)
@@ -742,7 +746,7 @@ class Finqual:
         df_ttm = df_cf.select(pl.col(df_cf.columns[1:5]))
         ttm = sum(df_ttm)
 
-        end_cash = df_ttm[4,0]
+        end_cash = df_ttm[4, 0]
 
         df_ttm = pl.DataFrame({
             self.ticker: line_items,
@@ -751,13 +755,13 @@ class Finqual:
 
         # --- Adjust specific line items
 
-        df_ttm[4,1] = end_cash
+        df_ttm[4, 1] = end_cash
 
         return df_ttm
 
     # ----
 
-    def _get_ratios(self, year: int|None, ratio_definitions: dict, statement_fetchers: dict, quarter: int | None = None, pct_flag: bool = False):
+    def _get_ratios(self, year: int | None, ratio_definitions: dict, statement_fetchers: dict, quarter: int | None = None, pct_flag: bool = False):
         """
         Method that takes in a dictionary with definitions of ratios and a dictionary of statements to retrieve (i.e. income, balance or cashflow)
 
@@ -773,21 +777,25 @@ class Finqual:
         else:
             ratio_multiplier = 1
 
+        # --- Label
+
         if year is None and quarter is None:
             label = "TTM"
 
         else:
             label = str(year) + "Q" + str(quarter) if quarter is not None else str(year)
 
+        # --- Retrieving ratios
+
         try:
             statement_data = {}
             for name, fetcher in statement_fetchers.items():
                 if quarter is None:
                     stmt = fetcher(year)
-                    statement_data[name] = dict(zip(stmt[self.ticker], stmt[label]))
+                    statement_data[name] = stmt.to_dict(as_series=False)
                 else:
                     stmt = fetcher(year, quarter)
-                    statement_data[name] = dict(zip(stmt[self.ticker], stmt[label]))
+                    statement_data[name] = stmt.to_dict(as_series=False)
 
             result = {'Ticker': self.ticker, 'Period': label}
             for ratio, func in ratio_definitions.items():
@@ -804,7 +812,7 @@ class Finqual:
                 result[ratio] = np.nan
             return result
 
-    def profitability_ratios(self, year: int|None = None, quarter: int | None = None):
+    def profitability_ratios(self, year: int | None = None, quarter: int | None = None):
 
         if year is None and quarter is None:
 
@@ -837,7 +845,7 @@ class Finqual:
 
         return df_ratio
 
-    def liquidity_ratios(self, year: int|None = None, quarter: int | None = None):
+    def liquidity_ratios(self, year: int | None = None, quarter: int | None = None):
 
         if year is None and quarter is None:
 
@@ -863,7 +871,7 @@ class Finqual:
 
         return df_ratio
 
-    def valuation_ratios(self, year: int|None = None, quarter: int | None = None):
+    def valuation_ratios(self, year: int | None = None, quarter: int | None = None):
         """
         Retrieve valuation for a given time period - only works for latest time.
 
@@ -888,9 +896,9 @@ class Finqual:
             share_price = np.nan  # Placeholder code - need to add the share price at the requested year and quarter
 
             statement_fetchers = {
-            'income': lambda y, q=None: self.income_stmt(y, q) if q else self.income_stmt(y),
-            'balance': lambda y, q=None: self.balance_sheet(y, q) if q else self.balance_sheet(y),
-            'cashflow': lambda y, q=None: self.cash_flow(y, q) if q else self.cash_flow(y),
+                'income': lambda y, q=None: self.income_stmt(y, q) if q else self.income_stmt(y),
+                'balance': lambda y, q=None: self.balance_sheet(y, q) if q else self.balance_sheet(y),
+                'cashflow': lambda y, q=None: self.cash_flow(y, q) if q else self.cash_flow(y),
             }
 
         ratio_definitions = {
