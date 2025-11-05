@@ -35,7 +35,7 @@ class CCA:
         match_indices = df_c.select((pl.col('ticker') == self.ticker).arg_true()).to_series().to_list()
 
         if n is None:
-            no_comparables = 5
+            no_comparables = 3
         else:
             no_comparables = n
 
