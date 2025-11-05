@@ -70,12 +70,9 @@ class CCA:
         tickers = self.get_c(n)
         lazy_frames = []
 
-        # Limit thread count for memory balance (I/O-bound, so 4–8 threads is plenty)
-        max_workers = min(8, len(tickers))
-
         # --- Collecting tickers
 
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        with ThreadPoolExecutor(max_workers=1) as executor:
             futures = {executor.submit(fetch_ratios, ticker): ticker for ticker
                        in tickers}
             for future in as_completed(futures):
@@ -112,11 +109,9 @@ class CCA:
         tickers = self.get_c(n)
         lazy_frames = []
 
-        max_workers = min(8, len(tickers))
-
         # --- Collecting tickers
 
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        with ThreadPoolExecutor(max_workers=1) as executor:
             futures = {executor.submit(fetch_ratios, ticker): ticker for ticker in tickers}
             for future in as_completed(futures):
                 df = future.result()
