@@ -6,7 +6,7 @@ from .stocktwit import StockTwit
 from datetime import datetime
 import functools
 from importlib.resources import files
-import json
+import ijson
 import numpy as np
 import polars as pl
 import re
@@ -206,16 +206,23 @@ class Finqual:
         self.sector = self.sec_edgar.sector
 
     @staticmethod
-    def load_trees(file_name: str) -> dict:
-        path = files("finqual.data") / file_name    # TODO: can this be more memory efficient
-        with open(path, "r") as f:
-            trees_dict = json.load(f)
-        return {k: [Node.from_dict(n) for n in v] for k, v in trees_dict.items()}
+    def load_trees(file_name: str) -> dict[str, list[Node]]:
+        path = files("finqual.data") / file_name
+        trees_dict: dict[str, list[Node]] = {}
+
+        with open(path, "r", encoding="utf-8") as f:
+            # assume structure like { "AAPL": [ {...}, {...} ], "MSFT": [ {...} ] }
+            parser = ijson.kvitems(f, "")
+            for key, node_list in parser:
+                # Stream each node instead of loading all
+                trees_dict[key] = [Node.from_dict(n) for n in node_list]
+
+        return trees_dict
 
     @staticmethod
     def load_label(file_name: str) -> pl.DataFrame:
-        path = files("finqual.data") / file_name    # TODO: can this be more memory efficient
-        df_label = pl.read_parquet(path)
+        path = files("finqual.data") / file_name
+        df_label = pl.scan_parquet(path)
         return df_label
 
     def select_tree(self):
@@ -228,21 +235,29 @@ class Finqual:
         else:
             return self.load_trees("gaap_trees.json")
 
-    def select_label(self):
-        if self.taxonomy == "us-gaap":
-            df_label = self.load_label("gaap_labels_v2.parquet")
-            df_label = df_label.filter(pl.col("count") > 1)
-            # df_probs = df_label.with_columns([(pl.col("count") / pl.sum("count").over(["yf", "type"])).alias("prob")])
-            return df_label
+    def select_label(self) -> pl.LazyFrame | pl.DataFrame:
 
-        elif self.taxonomy == "ifrs-full":
-            df_label = self.load_label("ifrs_labels.parquet")
-            df_label = df_label.filter(pl.col("count") > 1)
-            return df_label
-        else:
-            df_label = self.load_label("gaap_labels.parquet")
-            df_label = df_label.filter(pl.col("count") > 1)
-            return df_label
+        # --- Determine which label file to load based on taxonomy
+
+        label_files = {
+            "us-gaap": "gaap_labels_v2.parquet",
+            "ifrs-full": "ifrs_labels.parquet",
+        }
+
+        file_name = label_files.get(self.taxonomy, "gaap_labels.parquet")
+        path = files("finqual.data") / file_name
+
+        # --- Efficient loading
+
+        needed_cols = ["count", "yf", "type", "code", "prob"]  # Adjust based on how you use df_label downstream
+
+        df_label = (
+            pl.scan_parquet(path)
+            .select(needed_cols)
+            .filter(pl.col("count") > 1)
+        )
+
+        return df_label
 
     @staticmethod
     def _previous_quarters(year: int, annual_quarter: int):
@@ -367,7 +382,7 @@ class Finqual:
             df_total = pl.concat(all_dfs, how="vertical") if all_dfs else pl.DataFrame()
             df_total = df_total.filter(pl.col('period_type').is_in(period_type))
 
-            df_label = (self.labels.filter(pl.col('type').is_in(label_type)).select(['code', 'yf', 'prob']))
+            df_label = (self.labels.filter(pl.col('type').is_in(label_type)).select(['code', 'yf', 'prob'])).collect()
             df_total = df_total.join(df_label, on='code', how='inner').unique()
 
             # ---
@@ -576,7 +591,7 @@ class Finqual:
         years_period = [i for i in range(end_year, start_year - 1, -1)]
 
         results = {}
-        with ThreadPoolExecutor() as executor:
+        with ThreadPoolExecutor(max_workers=2) as executor:
             futures = {}
             for y in years_period:
                 if not quarter:
@@ -792,10 +807,10 @@ class Finqual:
             for name, fetcher in statement_fetchers.items():
                 if quarter is None:
                     stmt = fetcher(year)
-                    statement_data[name] = stmt.to_dict(as_series=False)
+                    statement_data[name] = dict(zip(stmt[self.ticker], stmt[label]))
                 else:
                     stmt = fetcher(year, quarter)
-                    statement_data[name] = stmt.to_dict(as_series=False)
+                    statement_data[name] = dict(zip(stmt[self.ticker], stmt[label]))
 
             result = {'Ticker': self.ticker, 'Period': label}
             for ratio, func in ratio_definitions.items():

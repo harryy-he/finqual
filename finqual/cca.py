@@ -31,7 +31,7 @@ class CCA:
     @weak_lru(maxsize=10)
     def get_c(self, n: int | None = None):
 
-        df_c = self.sectors.filter(pl.col('sector') == self.sector)
+        df_c = self.sectors.filter(pl.col('sector') == self.sector).collect()
         match_indices = df_c.select((pl.col('ticker') == self.ticker).arg_true()).to_series().to_list()
 
         if n is None:
