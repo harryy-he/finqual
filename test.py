@@ -1,6 +1,6 @@
 import finqual as fq
 
-tickers = ["NVDA", "ASML", "MSFT", "AAPL"]  # You can add more tickers if needed
+tickers = ["NVDA", "ASML"]  # You can add more tickers if needed
 start = 2020
 end = 2025
 quarter = 3  # For quarterly data

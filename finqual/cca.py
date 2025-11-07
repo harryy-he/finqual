@@ -28,7 +28,7 @@ class CCA:
         self.sector = self.fq_ticker.sector
         self.sectors = self.fq_ticker.load_label("sector_mapping.parquet")
 
-    @weak_lru(maxsize=10)
+    @weak_lru(maxsize=4)
     def get_c(self, n: int | None = None):
 
         df_c = self.sectors.filter(pl.col('sector') == self.sector).collect()
@@ -72,7 +72,7 @@ class CCA:
 
         # --- Collecting tickers
 
-        with ThreadPoolExecutor(max_workers=1) as executor:
+        with ThreadPoolExecutor(max_workers=4) as executor:
             futures = {executor.submit(fetch_ratios, ticker): ticker for ticker in tickers}
             for future in as_completed(futures):
                 df = future.result()
@@ -84,15 +84,21 @@ class CCA:
         if not lazy_frames:
             return pl.DataFrame()
 
-        df = pl.concat([lf.collect(streaming=True) for lf in lazy_frames], rechunk=True)
+        df = pl.concat(lazy_frames, how="vertical").collect(engine="streaming")
 
         # --- Sorting
 
         ticker_df = pl.DataFrame({"Ticker": tickers, "Ticker_order": list(range(len(tickers)))})
-        df = df.join(ticker_df, on="Ticker", how="left")
-        df = df.sort(["Period", "Ticker_order"], descending=[True, False])
 
-        return df.drop("Ticker_order")
+        df = (
+            df.lazy()
+            .join(ticker_df.lazy(), on="Ticker", how="left")
+            .sort(["Period", "Ticker_order"], descending=[True, False])
+            .drop("Ticker_order")
+            .collect(engine="streaming")
+        )
+
+        return df
 
     def _get_ratios_period(self, start_year: int, end_year: int, method_name: str, quarter: bool = False, n: int | None = None):
 
@@ -110,7 +116,7 @@ class CCA:
 
         # --- Collecting tickers
 
-        with ThreadPoolExecutor(max_workers=1) as executor:
+        with ThreadPoolExecutor(max_workers=4) as executor:
             futures = {executor.submit(fetch_ratios, ticker): ticker for ticker in tickers}
             for future in as_completed(futures):
                 df = future.result()
@@ -122,36 +128,42 @@ class CCA:
         if not lazy_frames:
             return pl.DataFrame()
 
-        df = pl.concat([lf.collect(streaming=True) for lf in lazy_frames], rechunk=True)
+        df = pl.concat(lazy_frames, how="vertical").collect(engine="streaming")
 
         # --- Sorting
 
         ticker_df = pl.DataFrame({"Ticker": tickers, "Ticker_order": list(range(len(tickers)))})
-        df = df.join(ticker_df, on="Ticker", how="left")
-        df = df.sort(["Period", "Ticker_order"], descending=[True, False])
 
-        return df.drop("Ticker_order")
+        df = (
+            df.lazy()
+            .join(ticker_df.lazy(), on="Ticker", how="left")
+            .sort(["Period", "Ticker_order"], descending=[True, False])
+            .drop("Ticker_order")
+            .collect(engine="streaming")
+        )
 
-    @weak_lru(maxsize=10)
+        return df
+
+    @weak_lru(maxsize=4)
     def profitability_ratios(self, year: int | None = None, quarter: int | None = None, n: int | None = None):
         return self._get_ratios(year, 'profitability_ratios', quarter, n)
 
-    @weak_lru(maxsize=10)
+    @weak_lru(maxsize=4)
     def liquidity_ratios(self, year: int | None = None, quarter: int | None = None, n: int | None = None):
         return self._get_ratios(year, 'liquidity_ratios', quarter, n)
 
-    @weak_lru(maxsize=10)
+    @weak_lru(maxsize=4)
     def valuation_ratios(self, year: int | None = None, quarter: int | None = None, n: int | None = None):
         return self._get_ratios(year, 'valuation_ratios', quarter, n)
 
-    @weak_lru(maxsize=10)
+    @weak_lru(maxsize=4)
     def profitability_ratios_period(self, start_year: int, end_year: int, quarter: bool = False, n: int | None = None):
         return self._get_ratios_period(start_year, end_year, 'profitability_ratios_period', quarter, n)
 
-    @weak_lru(maxsize=10)
+    @weak_lru(maxsize=4)
     def liquidity_ratios_period(self, start_year: int, end_year: int, quarter: bool = False, n: int | None = None):
         return self._get_ratios_period(start_year, end_year, 'liquidity_ratios_period', quarter, n)
 
-    @weak_lru(maxsize=10)
+    @weak_lru(maxsize=4)
     def valuation_ratios_period(self, start_year: int, end_year: int, quarter: bool = False, n: int | None = None):
         return self._get_ratios_period(start_year, end_year, 'valuation_ratios_period', quarter, n)
