@@ -376,23 +376,32 @@ class Finqual:
                 df_tree = tree.to_df()
 
                 if df_tree is not None:
-                    df_tree = df_tree.with_columns(pl.col("balance").cast(pl.Utf8))
-                    all_dfs.append(df_tree)
+                    all_dfs.append(df_tree.lazy().with_columns(pl.col("balance").cast(pl.Utf8)))
 
-            df_total = pl.concat(all_dfs, how="vertical") if all_dfs else pl.DataFrame()
-            df_total = df_total.filter(pl.col('period_type').is_in(period_type))
+            if not all_dfs:
+                return pl.DataFrame()
 
-            df_label = (self.labels.filter(pl.col('type').is_in(label_type)).select(['code', 'yf', 'prob'])).collect()
-            df_total = df_total.join(df_label, on='code', how='inner').unique()
+            df_label_lazy = (
+                self.labels.lazy()
+                .filter(pl.col("type").is_in(label_type))
+                .select(["code", "yf", "prob"])
+            )
 
-            # ---
-
-            df_total = df_total.filter(pl.col('yf').is_in(target_yf_list))
-
-            df_total = df_total.select(['yf', 'prob', 'value'])
-            df_total = (df_total.group_by(['yf', 'value']).agg(pl.col('prob').sum().alias('total_prob')).sort('total_prob', descending=True))
-            df_total = (df_total.sort(['yf', 'total_prob', 'value'], descending=[False, True, False]).unique(subset='yf', keep='first'))
-            df_total = df_total.filter(pl.col('total_prob') >= tolerance)
+            df_total = (
+                pl.concat(all_dfs, how="vertical")
+                .with_columns(pl.col("balance").cast(pl.Utf8))
+                .filter(pl.col("period_type").is_in(period_type))
+                .join(df_label_lazy, on="code", how="inner")
+                .unique()
+                .filter(pl.col("yf").is_in(target_yf_list))
+                .select(["yf", "prob", "value"])
+                .group_by(["yf", "value"])
+                .agg(pl.col("prob").sum().alias("total_prob"))
+                .sort(["yf", "total_prob", "value"], descending=[False, True, False])
+                .unique(subset="yf", keep="first")
+                .filter(pl.col("total_prob") >= tolerance)
+                .collect(engine="streaming")
+            )
 
             # ---
 
