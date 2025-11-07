@@ -72,7 +72,7 @@ class CCA:
 
         # --- Collecting tickers
 
-        with ThreadPoolExecutor(max_workers=4) as executor:
+        with ThreadPoolExecutor(max_workers=1) as executor:
             futures = {executor.submit(fetch_ratios, ticker): ticker for ticker in tickers}
             for future in as_completed(futures):
                 df = future.result()
