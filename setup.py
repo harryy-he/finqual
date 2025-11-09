@@ -16,7 +16,7 @@ setup(
         "License :: OSI Approved :: MIT License",  # or whichever license you use
         "Operating System :: OS Independent",
     ],
-    python_requires=">=3.6",
+    python_requires=">=3.6", #TODO: this is different from pypi-publish.yml, check for it creating a venv from scratch
     install_requires=["pandas>=2.2.3",
                       "polars>=1.35.1",
                       "cloudscraper>=1.2.71",
