@@ -20,11 +20,14 @@ def weak_lru(maxsize=128, typed=False):
         return inner
 
     return wrapper
+
+
 class CCA:
 
-    def __init__(self, ticker: str):
-        self.ticker = ticker
-        self.fq_ticker = Finqual(ticker)
+    def __init__(self, ticker_or_cik: str | int):
+        self.fq_ticker = Finqual(ticker_or_cik)
+        self.ticker = self.fq_ticker.ticker
+        self.cik = self.fq_ticker.ticker
         self.sector = self.fq_ticker.sector
         self.sectors = self.fq_ticker.load_label("sector_mapping.parquet")
 
