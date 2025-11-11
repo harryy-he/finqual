@@ -27,7 +27,7 @@ class CCA:
     def __init__(self, ticker_or_cik: str | int):
         self.fq_ticker = Finqual(ticker_or_cik)
         self.ticker = self.fq_ticker.ticker
-        self.cik = self.fq_ticker.ticker
+        self.cik = self.fq_ticker.cik
         self.sector = self.fq_ticker.sector
         self.sectors = self.fq_ticker.load_label("sector_mapping.parquet")
 
