@@ -1,0 +1,65 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+*venv*/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDEs / Editors
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+.history/
+
+# Jupyter
+.ipynb_checkpoints
+
+# Logs / Outputs
+logs/
+*.log
+*.out
+*.err
+
+# Build / Packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+*.manifest
+*.spec
+
+# Data / Models
+data/
+datasets/
+models/
+*.h5
+*.pkl
+*.ckpt
+*.pt
+*.bin
+
+# Coverage / Testing
+.coverage
+htmlcov/
+.tox/
+.pytest_cache/
+
+# Temporary
+*.tmp
+*.swp
+*.bak
+
+# Node (if frontend present)
+node_modules/
+npm-debug.log
+yarn-error.log

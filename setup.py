@@ -16,7 +16,7 @@ setup(
         "License :: OSI Approved :: MIT License",  # or whichever license you use
         "Operating System :: OS Independent",
     ],
-    python_requires=">=3.6",
+    python_requires=">=3.10", 
     install_requires=["pandas>=2.2.3",
                       "polars>=1.35.1",
                       "cloudscraper>=1.2.71",
@@ -25,7 +25,8 @@ setup(
                       "matplotlib>=3.8.0",
                       "pyarrow>=12.0.0",
                       "ijson>=3.4.0",
-                      "numpy>=2.3.4",
+                      "numpy>=2.2.6",
+                      "pydantic==2.12.4"
                       ]
 )
 
