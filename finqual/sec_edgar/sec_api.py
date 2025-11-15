@@ -30,23 +30,24 @@ def weak_lru(maxsize=128, typed=False):
 def map_missing_frames(df: pl.DataFrame) -> pl.DataFrame:
 
     # Creating mapping based on "key", "end" and "frame" columns
-    frame_map = (
+    frame_map_se = (
         df.filter(pl.col("frame").is_not_null())
-        .select(["key", "end", "frame"])
+        .select(["key", "start", "end", "frame"])
         .unique()
+        .rename({"frame": "frame_se"})
     )
 
-    # Mapping to dataframe
-    df_filled = (
-        df.join(frame_map, on=["end"], how="left", suffix="_mapped")
-        .with_columns(
-            pl.when(pl.col("frame").is_null())
-            .then(pl.col("frame_mapped"))
-            .otherwise(pl.col("frame"))
-            .alias("frame_map")
-        )
-        .drop("frame_mapped")
+    frame_map_e = (
+        df.filter(pl.col("frame").is_not_null())
+        .select(["end","frame"])
+        .unique()
+        .rename({"frame": "frame_e"})
     )
+
+    df_se = df.join(frame_map_se, on=["start", "end"], how="left")
+    df_see = df_se.join(frame_map_e, on=["end"], how="left")
+
+    df_filled = df_see.with_columns(pl.coalesce(["frame", "frame_se", "frame_e"]).alias("frame_map")).drop(["frame_se", "frame_e"])
 
     # Remove any I's from "frame_map" col
     df_filled = df_filled.with_columns([
@@ -60,7 +61,16 @@ def map_missing_frames(df: pl.DataFrame) -> pl.DataFrame:
         .then(pl.col("frame_map") + "I")
         .otherwise(pl.col("frame_map"))
         .alias("frame_map")
-    ]).unique(subset=["key", "frame_map"], keep='last')
+    ]).unique(subset=["key", "frame_map", "fp"], keep='last')
+
+    # ---
+
+    # # The rule remove incorrect attribution of annual data to a quarter (e.g. Amazon CASHFLOW 2025Q3 results is incorrectly attributed as CY2025)
+    df_filled = df_filled.filter(
+        ~((pl.col("frame") == "None") & (pl.col("frame_map").str.contains(r"^CY\d{4}$")))
+    )
+
+    # ---
 
     df_filled = df_filled.sort(["key", "end", "frame_map"])
 

@@ -497,6 +497,20 @@ class Finqual():
         # ---
 
         for item, inc in increments.items():
+
+            # --- For Gross Profit, this line item is sometimes not reported explicitly
+
+            expected_frame = f"CY{year}" if quarter is None else f"CY{year}Q{quarter}"
+
+            if item == "Gross Profit":
+                exists = any(k == "GrossProfit" and f == expected_frame
+                    for k, f in zip(self.sec_edgar.sec_data['key'], self.sec_edgar.sec_data['frame_map'])
+                )
+                if not exists:
+                    continue
+
+            # ---
+
             df_income = df_income.with_columns(
                 pl.when((pl.col("line_item") == item) & (pl.col("total_prob") != 0))
                 .then(pl.col("total_prob") + inc)
