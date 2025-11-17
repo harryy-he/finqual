@@ -199,7 +199,7 @@ class SecApi:
                             currency_counts[unit_type] = currency_counts.get(unit_type, 0) + 1  # Counting currencies
 
                             for entry in entries:
-                                if entry.get("form") not in ['10-K', '10-Q', '8-K', '20-F', '40-F', '6-F', '6-K']:
+                                if entry.get("form") not in ['10-K', '10-Q', '8-K', '20-F', '40-F', '6-F', '6-K', '10-K/A']:
                                     continue
 
                                 rows.append({
