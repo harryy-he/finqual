@@ -193,11 +193,41 @@ def triangulate_smart(df: pl.DataFrame, rules: list[dict[str]]) -> tuple[pl.Data
 
 # ----------------------------------------------------------------------------------
 
-class Finqual:
+class Finqual():
+    """
+    The main interface for interacting with SEC EDGAR filings and standardized financial data.
 
-    def __init__(self, ticker: str):
-        self.ticker = ticker
-        self.sec_edgar = SecApi(ticker)
+    This class abstracts access to company-specific fundamentals (income statement, balance sheet,
+    cash flow), metadata (ticker, CIK, taxonomy, sector), and their associated taxonomy trees and labels.
+
+    It uses the `SecApi` client to fetch filing information, determine taxonomy, and then selects
+    the appropriate data resources (trees and labels) for that taxonomy.
+
+    Attributes
+    ----------
+    ticker_or_cik : str | int
+        The company identifier (ticker symbol or CIK).
+    sec_edgar : SecApi
+        Underlying SEC API client used to query filings and metadata.
+    ticker : str
+        Company ticker symbol.
+    cik : str
+        Company CIK code (10-digit zero-padded string).
+    taxonomy : str
+        The accounting taxonomy used by the company (e.g., "us-gaap" or "ifrs-full").
+    trees : dict[str, list[Node]]
+        Parsed financial statement structure definitions based on taxonomy.
+    labels : pl.LazyFrame | pl.DataFrame
+        Polars DataFrame or LazyFrame with taxonomy label mappings and metadata.
+    sector : str
+        Company’s industry sector (as identified by SEC metadata).
+    """
+    
+    def __init__(self, ticker_or_cik: str | int):
+        self.ticker_or_cik = ticker_or_cik
+        self.sec_edgar = SecApi(ticker_or_cik)
+        self.ticker = self.sec_edgar.ticker
+        self.cik = self.sec_edgar.cik
         self.taxonomy = self.sec_edgar.taxonomy
 
         self.trees = self.select_tree()
@@ -467,6 +497,20 @@ class Finqual:
         # ---
 
         for item, inc in increments.items():
+
+            # --- For Gross Profit, this line item is sometimes not reported explicitly
+
+            expected_frame = f"CY{year}" if quarter is None else f"CY{year}Q{quarter}"
+
+            if item == "Gross Profit":
+                exists = any(k == "GrossProfit" and f == expected_frame
+                    for k, f in zip(self.sec_edgar.sec_data['key'], self.sec_edgar.sec_data['frame_map'])
+                )
+                if not exists:
+                    continue
+
+            # ---
+
             df_income = df_income.with_columns(
                 pl.when((pl.col("line_item") == item) & (pl.col("total_prob") != 0))
                 .then(pl.col("total_prob") + inc)

@@ -1,3 +1,4 @@
+from typing import Optional
 import requests
 import polars as pl
 import functools
@@ -6,6 +7,9 @@ from ratelimit import limits
 import gzip
 import ijson
 import io
+
+from finqual.sec_edgar.entities.exceptions import IdCodeNotFoundError
+from finqual.sec_edgar.entities.models import IdCode
 
 def weak_lru(maxsize=128, typed=False):
     """LRU Cache decorator that keeps a weak reference to 'self'"""
@@ -26,23 +30,24 @@ def weak_lru(maxsize=128, typed=False):
 def map_missing_frames(df: pl.DataFrame) -> pl.DataFrame:
 
     # Creating mapping based on "key", "end" and "frame" columns
-    frame_map = (
+    frame_map_se = (
         df.filter(pl.col("frame").is_not_null())
-        .select(["key", "end", "frame"])
+        .select(["key", "start", "end", "frame"])
         .unique()
+        .rename({"frame": "frame_se"})
     )
 
-    # Mapping to dataframe
-    df_filled = (
-        df.join(frame_map, on=["end"], how="left", suffix="_mapped")
-        .with_columns(
-            pl.when(pl.col("frame").is_null())
-            .then(pl.col("frame_mapped"))
-            .otherwise(pl.col("frame"))
-            .alias("frame_map")
-        )
-        .drop("frame_mapped")
+    frame_map_e = (
+        df.filter(pl.col("frame").is_not_null())
+        .select(["end","frame"])
+        .unique()
+        .rename({"frame": "frame_e"})
     )
+
+    df_se = df.join(frame_map_se, on=["start", "end"], how="left")
+    df_see = df_se.join(frame_map_e, on=["end"], how="left")
+
+    df_filled = df_see.with_columns(pl.coalesce(["frame", "frame_se", "frame_e"]).alias("frame_map")).drop(["frame_se", "frame_e"])
 
     # Remove any I's from "frame_map" col
     df_filled = df_filled.with_columns([
@@ -56,7 +61,16 @@ def map_missing_frames(df: pl.DataFrame) -> pl.DataFrame:
         .then(pl.col("frame_map") + "I")
         .otherwise(pl.col("frame_map"))
         .alias("frame_map")
-    ]).unique(subset=["key", "frame_map"], keep='last')
+    ]).unique(subset=["key", "frame_map", "fp"], keep='last')
+
+    # ---
+
+    # # The rule remove incorrect attribution of annual data to a quarter (e.g. Amazon CASHFLOW 2025Q3 results is incorrectly attributed as CY2025)
+    df_filled = df_filled.filter(
+        ~((pl.col("frame") == "None") & (pl.col("frame_map").str.contains(r"^CY\d{4}$")))
+    )
+
+    # ---
 
     df_filled = df_filled.sort(["key", "end", "frame_map"])
 
@@ -115,22 +129,22 @@ def convert_to_quarters(df: pl.DataFrame) -> pl.DataFrame:
 
 class SecApi:
 
-    def __init__(self, ticker):
-        self.ticker = ticker
-
+    def __init__(self, ticker_or_cik):        
         self.headers = {"Accept": "application/json, text/plain, */*",
-                        "Accept-Language": "en-US,en;q=0.9",
-                        "Origin": "https://www.nasdaq.com",
-                        "Referer": "https://www.nasdaq.com",
-                        "User-Agent": 'YourName (your@email.com)',
-                        'Accept-Encoding': 'gzip, deflate',
-                        }
-
-        id_data = self.get_id_code()
-
-        self.cik = id_data[0]
-        self.name = id_data[1]
-
+                            "Accept-Language": "en-US,en;q=0.9",
+                            "Origin": "https://www.nasdaq.com",
+                            "Referer": "https://www.nasdaq.com",
+                            "User-Agent": 'YourName (your@email.com)',
+                            'Accept-Encoding': 'gzip, deflate',
+                            }
+        
+        id_data = self.get_id_code(ticker_or_cik)
+        
+        self.cik = id_data.cik #TODO: later on this can be directly assigned with the basemodel IdCode
+        self.name = id_data.name
+        self.ticker = id_data.ticker
+        self.exchange = id_data.exchange
+        
         del id_data
 
         facts_data = self.process_company_facts()
@@ -185,7 +199,7 @@ class SecApi:
                             currency_counts[unit_type] = currency_counts.get(unit_type, 0) + 1  # Counting currencies
 
                             for entry in entries:
-                                if entry.get("form") not in ['10-K', '10-Q', '8-K', '20-F', '40-F', '6-F', '6-K']:
+                                if entry.get("form") not in ['10-K', '10-Q', '8-K', '20-F', '40-F', '6-F', '6-K', '10-K/A']:
                                     continue
 
                                 rows.append({
@@ -231,10 +245,11 @@ class SecApi:
     # --- CIK code
 
     @weak_lru(maxsize=4)
-    def get_id_code(self):
+    def get_id_code(self, ticker_or_cik: str | int):
 
         url = "https://www.sec.gov/files/company_tickers_exchange.json"
-
+        ticker_or_cik = str(ticker_or_cik)
+        
         with requests.get(url, headers=self.headers, stream=True) as r:
             gz = gzip.GzipFile(fileobj=r.raw)
             text_stream = io.TextIOWrapper(gz, encoding="utf‑8", errors="replace")
@@ -242,8 +257,16 @@ class SecApi:
             # Each item in the JSON array is like: [cik, title, ticker, exchange]
             for item in ijson.items(text_stream, "data.item"):
                 cik, name, ticker, exchange = item
-                if ticker.lower() == self.ticker.lower():
-                    return str(cik).zfill(10), name
+                if ticker.lower() == ticker_or_cik.lower() or str(cik) == ticker_or_cik:
+                    payload = {
+                        "cik": str(cik).zfill(10),
+                        "name": name,
+                        "ticker": ticker,
+                        "exchange": exchange
+                        } 
+                    return IdCode(**payload)
+                
+            raise IdCodeNotFoundError(ticker_or_cik)
 
     # --- Company submissions
 
