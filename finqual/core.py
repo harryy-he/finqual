@@ -14,7 +14,25 @@ import weakref
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-def weak_lru(maxsize=128, typed=False):
+def weak_lru(maxsize: int = 128, typed: bool = False):
+    """
+    LRU cache decorator that stores a weak reference to 'self'.
+
+    This decorator is used to cache instance method results while avoiding
+    memory leaks by keeping only a weak reference to the object.
+
+    Parameters
+    ----------
+    maxsize : int, optional
+        Maximum size of the LRU cache (default is 128).
+    typed : bool, optional
+        If True, arguments of different types will be cached separately.
+
+    Returns
+    -------
+    callable
+        Decorator function to wrap methods with a weak LRU cache.
+    """
     """LRU Cache decorator that keeps a weak reference to 'self'"""
     def wrapper(func):
 
@@ -32,7 +50,27 @@ def weak_lru(maxsize=128, typed=False):
 
 def build_rule(equation_str: str, prefer_balance: list[str] = None) -> dict:
     """
-    Convert a rule string into a rule dictionary, with a preferred balancing item if specified.
+    Converts an equation string into a calculation rule dictionary.
+
+    The rule dictionary includes the variables involved, a calculation function
+    to solve for any missing variable, and optionally a list of preferred variables
+    for balancing.
+
+    Parameters
+    ----------
+    equation_str : str
+        A string representing the equation (e.g., "Gross Profit = Total Revenue - Cost Of Revenue").
+    prefer_balance : list of str, optional
+        List of variables to prioritize when balancing or recalculating.
+
+    Returns
+    -------
+    dict
+        A dictionary containing:
+        - 'name': str, original equation string
+        - 'vars': list[str], variables in the equation
+        - 'calc': callable, function to calculate missing variable
+        - 'prefer_balance': list[str], normalized preferred balancing variables
     """
     lhs, rhs = equation_str.split("=")
     lhs = lhs.strip()
@@ -105,21 +143,23 @@ def build_rule(equation_str: str, prefer_balance: list[str] = None) -> dict:
 
 def triangulate_smart(df: pl.DataFrame, rules: list[dict[str]]) -> tuple[pl.DataFrame, list[str]]:
     """
-    Triangulate financials using rule-based recalculation in Polars.
+    Apply rule-based triangulation to a financial DataFrame to fill missing values.
+
+    The function recalculates low-confidence line items using defined rules
+    and preferred balancing variables.
 
     Parameters
     ----------
     df : pl.DataFrame
-        Must have columns ["line_item", "value", "total_prob"]
-    rules : list of dicts
-        Each dict contains:
-        - "vars": list[str]  # variables in the rule
-        - "calc": callable   # function accepting keyword args
-        - "prefer_balance": optional list[str]  # tie-breaker
+        DataFrame containing financial data with columns ["line_item", "value", "total_prob"].
+    rules : list of dict
+        List of rule dictionaries (as returned by `build_rule`) defining variable relationships.
 
     Returns
     -------
-    pl.DataFrame, list[str]
+    tuple
+        - pl.DataFrame: Updated DataFrame with recalculated values
+        - list[str]: Notes describing which line items were recalculated
     """
     notes: list[str] = []
     updated: set[str] = set()
@@ -193,7 +233,7 @@ def triangulate_smart(df: pl.DataFrame, rules: list[dict[str]]) -> tuple[pl.Data
 
 # ----------------------------------------------------------------------------------
 
-class Finqual():
+class Finqual:
     """
     The main interface for interacting with SEC EDGAR filings and standardized financial data.
 
@@ -237,6 +277,19 @@ class Finqual():
 
     @staticmethod
     def load_trees(file_name: str) -> dict[str, list[Node]]:
+        """
+        Load taxonomy trees from a JSON file.
+
+        Parameters
+        ----------
+        file_name : str
+            Name of the JSON file containing taxonomy trees.
+
+        Returns
+        -------
+        dict[str, list[Node]]
+            Dictionary mapping ticker to a list of Node objects representing the tree.
+        """
         path = files("finqual.data") / file_name
         trees_dict: dict[str, list[Node]] = {}
 
@@ -251,11 +304,32 @@ class Finqual():
 
     @staticmethod
     def load_label(file_name: str) -> pl.DataFrame:
+        """
+        Load label mappings from a Parquet file.
+
+        Parameters
+        ----------
+        file_name : str
+            Name of the Parquet file containing label data.
+
+        Returns
+        -------
+        pl.DataFrame
+            Polars DataFrame with taxonomy label information.
+        """
         path = files("finqual.data") / file_name
         df_label = pl.scan_parquet(path)
         return df_label
 
-    def select_tree(self):
+    def select_tree(self) -> dict[str, list[Node]]:
+        """
+        Select and load the appropriate taxonomy tree based on the company's taxonomy.
+
+        Returns
+        -------
+        dict[str, list[Node]]
+            Dictionary of Node trees keyed by ticker.
+        """
         if self.taxonomy == "us-gaap":
             return self.load_trees("gaap_trees.json")
 
@@ -266,7 +340,14 @@ class Finqual():
             return self.load_trees("gaap_trees.json")
 
     def select_label(self) -> pl.LazyFrame | pl.DataFrame:
+        """
+        Select and load the appropriate label mapping based on taxonomy.
 
+        Returns
+        -------
+        pl.LazyFrame | pl.DataFrame
+            Polars DataFrame or LazyFrame with filtered label mappings.
+        """
         # --- Determine which label file to load based on taxonomy
 
         label_files = {
@@ -290,8 +371,22 @@ class Finqual():
         return df_label
 
     @staticmethod
-    def _previous_quarters(year: int, annual_quarter: int):
+    def _previous_quarters(year: int, annual_quarter: int) -> list[list[int]]:
+        """
+        Calculate the three previous quarters given a year and annual quarter.
 
+        Parameters
+        ----------
+        year : int
+            Year of the annual quarter.
+        annual_quarter : int
+            Quarter number of the annual report (1-4).
+
+        Returns
+        -------
+        list[list[int]]
+            List of [year, quarter] pairs for the three previous quarters.
+        """
         results = []
         for i in range(1, 4):
             q = annual_quarter - i
@@ -303,7 +398,24 @@ class Finqual():
         return results
 
     @weak_lru(maxsize=4)
-    def _process_annual_quarter(self, year: int, quarter: int, label_type: tuple):
+    def _process_annual_quarter(self, year: int, quarter: int, label_type: tuple) -> pl.DataFrame:
+        """
+        Process annual quarter data by comparing annual report with the sum of previous quarters.
+
+        Parameters
+        ----------
+        year : int
+            Fiscal year.
+        quarter : int
+            Quarter number of the annual report.
+        label_type : tuple
+            Statement type tuple, e.g., ("income_statement",) or ("cash_flow",).
+
+        Returns
+        -------
+        pl.DataFrame
+            Polars DataFrame with annual quarter values.
+        """
 
         quarter_list = self._previous_quarters(year, quarter)
 
@@ -382,7 +494,30 @@ class Finqual():
 
     @weak_lru(maxsize=4)
     def _process_financials(self, year: int, quarter: int | None, label_type: tuple,
-                            period_type: tuple, target_yf_list: tuple, tolerance: float = 0.4):
+                            period_type: tuple, target_yf_list: tuple, tolerance: float = 0.4) -> pl.DataFrame:
+        """
+        Fetch and process financial data for a given year, quarter, and statement type.
+
+        Parameters
+        ----------
+        year : int
+            Fiscal year.
+        quarter : int | None
+            Fiscal quarter; None for annual data.
+        label_type : tuple
+            Statement type(s), e.g., ("income_statement",), ("cash_flow",).
+        period_type : tuple
+            Period type(s), e.g., ("duration", "instant").
+        target_yf_list : tuple
+            List of target line items to retrieve.
+        tolerance : float, default=0.4
+            Minimum probability threshold for including a line item.
+
+        Returns
+        -------
+        pl.DataFrame
+            Polars DataFrame with processed financial data.
+        """
 
         if self.taxonomy == 'ifrs-full':
             tolerance = 0.0
@@ -457,7 +592,22 @@ class Finqual():
             return df_target
 
     @weak_lru(maxsize=4)
-    def income_stmt(self, year: int, quarter: int | None = None):
+    def income_stmt(self, year: int, quarter: int | None = None) -> pl.DataFrame:
+        """
+        Retrieve the income statement for a given year and optional quarter.
+
+        Parameters
+        ----------
+        year : int
+            Fiscal year.
+        quarter : int | None, optional
+            Fiscal quarter; None for annual report.
+
+        Returns
+        -------
+        pl.DataFrame
+            Polars DataFrame of the income statement, with line items as rows.
+        """
 
         income_list = [
             'Total Revenue', 'Cost Of Revenue', 'Gross Profit',
@@ -504,8 +654,8 @@ class Finqual():
 
             if item == "Gross Profit":
                 exists = any(k == "GrossProfit" and f == expected_frame
-                    for k, f in zip(self.sec_edgar.sec_data['key'], self.sec_edgar.sec_data['frame_map'])
-                )
+                             for k, f in zip(self.sec_edgar.sec_data['key'], self.sec_edgar.sec_data['frame_map'])
+                             )
                 if not exists:
                     continue
 
@@ -536,7 +686,23 @@ class Finqual():
         return df_income
 
     @weak_lru(maxsize=4)
-    def balance_sheet(self, year: int, quarter: int | None = None):
+    def balance_sheet(self, year: int, quarter: int | None = None) -> pl.DataFrame:
+        """
+        Retrieve the balance sheet for a given year and optional quarter.
+
+        Parameters
+        ----------
+        year : int
+            Fiscal year.
+        quarter : int | None, optional
+            Fiscal quarter; None for annual report.
+
+        Returns
+        -------
+        pl.DataFrame
+            Polars DataFrame of the balance sheet, with line items as rows.
+        """
+
         balance_list = [
             "Total Assets",
             "Current Assets", "Other Short Term Investments", "Receivables", "Inventory", "Other Current Assets",
@@ -593,7 +759,22 @@ class Finqual():
         return df_bs
 
     @weak_lru(maxsize=4)
-    def cash_flow(self, year: int, quarter: int | None = None):
+    def cash_flow(self, year: int, quarter: int | None = None) -> pl.DataFrame:
+        """
+        Retrieve the cash flow statement for a given year and optional quarter.
+
+        Parameters
+        ----------
+        year : int
+            Fiscal year.
+        quarter : int | None, optional
+            Fiscal quarter; None for annual report.
+
+        Returns
+        -------
+        pl.DataFrame
+            Polars DataFrame of the cash flow statement, with line items as rows.
+        """
 
         cashflow_list = [
 
@@ -628,16 +809,27 @@ class Finqual():
 
         return df_cf
 
-    def _financials_period(self, method_name: str, start_year: int, end_year: int, append_type: str, quarter: bool = False):
+    def _financials_period(self, method_name: str, start_year: int, end_year: int, append_type: str, quarter: bool = False) -> pl.DataFrame:
         """
-        General method to retrieve financial statements or ratios over a given period
+        Retrieve financial statements or ratios over a specified period.
 
-        :param method_name: Method name within Finqual to call
-        :param start_year: Start of period
-        :param end_year: End of period
-        :param append_type: Tells the method whether it is a 'statement' or 'ratios' to look for
-        :param quarter: Returns quarterly info
-        :return:
+        Parameters
+        ----------
+        method_name : str
+            Method to call (e.g., 'income_stmt', 'balance_sheet').
+        start_year : int
+            Start year of the period.
+        end_year : int
+            End year of the period.
+        append_type : str
+            'statement' for financials, 'ratios' for ratios.
+        quarter : bool, default=False
+            If True, returns quarterly data.
+
+        Returns
+        -------
+        pl.DataFrame
+            Concatenated Polars DataFrame for the specified period.
         """
         func = getattr(self, method_name)
 
@@ -711,10 +903,47 @@ class Finqual():
 
             return df_total
 
-    def income_stmt_period(self, start_year: int, end_year: int, quarter: bool = False):
+    def income_stmt_period(self, start_year: int, end_year: int,
+                           quarter: bool = False) -> pl.DataFrame:
+        """
+        Retrieve income statements over a range of years or quarters.
+
+        Parameters
+        ----------
+        start_year : int
+            Start year of the period.
+        end_year : int
+            End year of the period.
+        quarter : bool, default=False
+            If True, returns quarterly data; otherwise annual.
+
+        Returns
+        -------
+        pl.DataFrame
+            Polars DataFrame with income statement values for each year/quarter.
+        """
         return self._financials_period('income_stmt', start_year, end_year, 'statement', quarter)
 
-    def balance_sheet_period(self, start_year: int, end_year: int, quarter: bool = False):
+    def balance_sheet_period(self, start_year: int, end_year: int,
+                             quarter: bool = False) -> pl.DataFrame:
+        """
+        Retrieve balance sheets over a range of years or quarters.
+
+        Parameters
+        ----------
+        start_year : int
+            Start year of the period.
+        end_year : int
+            End year of the period.
+        quarter : bool, default=False
+            If True, returns quarterly data; otherwise annual.
+
+        Returns
+        -------
+        pl.DataFrame
+            Polars DataFrame with balance sheet values for each year/quarter.
+            Drops columns where all values are zero and removes "Shares Outstanding" from main data.
+        """
 
         df_bs = self._financials_period('balance_sheet', start_year, end_year, 'statement', quarter)
         df_filtered = df_bs.filter(pl.col(self.ticker) != "Shares Outstanding")
@@ -723,11 +952,40 @@ class Finqual():
 
         return df_bs
 
-    def cash_flow_period(self, start_year: int, end_year: int, quarter: bool = False):
+    def cash_flow_period(self, start_year: int, end_year: int,
+                         quarter: bool = False) -> pl.DataFrame:
+        """
+        Retrieve cash flow statements over a range of years or quarters.
+
+        Parameters
+        ----------
+        start_year : int
+            Start year of the period.
+        end_year : int
+            End year of the period.
+        quarter : bool, default=False
+            If True, returns quarterly data; otherwise annual.
+
+        Returns
+        -------
+        pl.DataFrame
+            Polars DataFrame with cash flow statement values for each year/quarter.
+        """
         return self._financials_period('cash_flow', start_year, end_year, 'statement', quarter)
 
     @weak_lru(maxsize=4)
-    def income_stmt_ttm(self):
+    def income_stmt_ttm(self) -> pl.DataFrame:
+        """
+        Retrieve trailing twelve months (TTM) income statement.
+
+        Returns
+        -------
+        pl.DataFrame
+            Polars DataFrame containing TTM income statement values.
+        Notes
+        -----
+        If insufficient quarterly data exists, falls back to annual data for TTM calculation.
+        """
         current_year = int(datetime.now().year)
 
         # TODO: find latest, change previous_quarter method
@@ -765,7 +1023,18 @@ class Finqual():
         return df_ttm
 
     @weak_lru(maxsize=4)
-    def balance_sheet_ttm(self):
+    def balance_sheet_ttm(self) -> pl.DataFrame:
+        """
+        Retrieve trailing twelve months (TTM) balance sheet.
+
+        Returns
+        -------
+        pl.DataFrame
+            Polars DataFrame containing TTM balance sheet values.
+        Notes
+        -----
+        If no balance sheet data exists, returns NaN for TTM values.
+        """
         current_year = int(datetime.now().year)
         df_bs = self.balance_sheet_period(current_year - 1, current_year + 1, True)
 
@@ -792,7 +1061,18 @@ class Finqual():
         return df_ttm
 
     @weak_lru(maxsize=4)
-    def cash_flow_ttm(self):
+    def cash_flow_ttm(self) -> pl.DataFrame:
+        """
+        Retrieve trailing twelve months (TTM) cash flow statement.
+
+        Returns
+        -------
+        pl.DataFrame
+            Polars DataFrame containing TTM cash flow statement values.
+        Notes
+        -----
+        Adjusts end cash position to match instantaneous nature of cash in cash flow statement.
+        """
         current_year = int(datetime.now().year)
         df_cf = self.cash_flow_period(current_year - 2, current_year + 1, True)
 
@@ -829,16 +1109,28 @@ class Finqual():
 
     # ----
 
-    def _get_ratios(self, year: int | None, ratio_definitions: dict, statement_fetchers: dict, quarter: int | None = None, pct_flag: bool = False):
+    def _get_ratios(self, year: int | None, ratio_definitions: dict, statement_fetchers: dict,
+                    quarter: int | None = None, pct_flag: bool = False) -> dict:
         """
-        Method that takes in a dictionary with definitions of ratios and a dictionary of statements to retrieve (i.e. income, balance or cashflow)
+        Calculate financial ratios for a specific year/quarter or TTM.
 
-        :param year: The year of info to retrieve from
-        :param ratio_definitions: Dictionary of ratio definitions/formula
-        :param statement_fetchers: Dictionary of statements to retrieve (i.e. income, balance, cashflow)
-        :param quarter: The specific quarter to look at
-        :param pct_flag: True/False for whether the ratio is expressed in terms of percentages
-        :return:
+        Parameters
+        ----------
+        year : int | None
+            Fiscal year of interest; None for TTM.
+        ratio_definitions : dict[str, callable]
+            Dictionary of ratio name to calculation function.
+        statement_fetchers : dict[str, callable]
+            Dictionary mapping statement types ('income', 'balance', 'cashflow') to fetcher functions.
+        quarter : int | None, default=None
+            Specific quarter; None for full year or TTM.
+        pct_flag : bool, default=False
+            If True, ratios are expressed as percentages.
+
+        Returns
+        -------
+        dict
+            Dictionary containing 'Ticker', 'Period', and calculated ratios.
         """
         if pct_flag:
             ratio_multiplier = 100
@@ -880,7 +1172,22 @@ class Finqual():
                 result[ratio] = np.nan
             return result
 
-    def profitability_ratios(self, year: int | None = None, quarter: int | None = None):
+    def profitability_ratios(self, year: int | None = None, quarter: int | None = None) -> pl.DataFrame:
+        """
+        Calculate key profitability ratios (e.g., ROA, ROE, Gross Margin).
+
+        Parameters
+        ----------
+        year : int | None, default=None
+            Fiscal year; None for TTM.
+        quarter : int | None, default=None
+            Specific quarter; None for annual data.
+
+        Returns
+        -------
+        pl.DataFrame
+            Polars DataFrame with profitability ratios.
+        """
 
         if year is None and quarter is None:
 
@@ -913,7 +1220,22 @@ class Finqual():
 
         return df_ratio
 
-    def liquidity_ratios(self, year: int | None = None, quarter: int | None = None):
+    def liquidity_ratios(self, year: int | None = None, quarter: int | None = None) -> pl.DataFrame:
+        """
+        Calculate liquidity ratios (Current Ratio, Quick Ratio, Debt-to-Equity).
+
+        Parameters
+        ----------
+        year : int | None, default=None
+            Fiscal year; None for TTM.
+        quarter : int | None, default=None
+            Specific quarter; None for annual data.
+
+        Returns
+        -------
+        pl.DataFrame
+            Polars DataFrame with liquidity ratios.
+        """
 
         if year is None and quarter is None:
 
@@ -939,14 +1261,26 @@ class Finqual():
 
         return df_ratio
 
-    def valuation_ratios(self, year: int | None = None, quarter: int | None = None):
+    def valuation_ratios(self, year: int | None = None, quarter: int | None = None) -> pl.DataFrame:
         """
-        Retrieve valuation for a given time period - only works for latest time.
+        Calculate valuation ratios (EPS, P/E, P/B, EV/EBITDA) for a given period.
 
-        :param year: Year of interest
-        :param quarter: Quarter of interest
-        :return:
+        Parameters
+        ----------
+        year : int | None, default=None
+            Fiscal year; None for TTM.
+        quarter : int | None, default=None
+            Specific quarter; None for annual data.
+
+        Returns
+        -------
+        pl.DataFrame
+            Polars DataFrame with valuation ratios.
+        Notes
+        -----
+        Historical valuation ratios are not implemented; only current/latest data is supported.
         """
+
         if year is None and quarter is None:
 
             share_price = StockTwit(self.ticker).retrieve_data()[self.ticker]  # This would have to be the share price at the given year and quarter time
@@ -983,11 +1317,65 @@ class Finqual():
 
         return df_ratio
 
-    def profitability_ratios_period(self, start_year: int, end_year: int, quarter: bool = False):
+    def profitability_ratios_period(self, start_year: int, end_year: int, quarter: bool = False) -> pl.DataFrame:
+        """
+        Retrieve profitability ratios over a period of years or quarters.
+
+        Parameters
+        ----------
+        start_year : int
+            Start year of the period.
+        end_year : int
+            End year of the period.
+        quarter : bool, default=False
+            If True, returns quarterly ratios.
+
+        Returns
+        -------
+        pl.DataFrame
+            Polars DataFrame with profitability ratios over the specified period.
+        """
         return self._financials_period("profitability_ratios", start_year, end_year, 'ratios', quarter)
 
-    def liquidity_ratios_period(self, start_year: int, end_year: int, quarter: bool = False):
+    def liquidity_ratios_period(self, start_year: int, end_year: int, quarter: bool = False) -> pl.DataFrame:
+        """
+        Retrieve liquidity ratios over a period of years or quarters.
+
+        Parameters
+        ----------
+        start_year : int
+            Start year of the period.
+        end_year : int
+            End year of the period.
+        quarter : bool, default=False
+            If True, returns quarterly ratios.
+
+        Returns
+        -------
+        pl.DataFrame
+            Polars DataFrame with liquidity ratios over the specified period.
+        """
         return self._financials_period("liquidity_ratios", start_year, end_year, 'ratios', quarter)
 
-    def valuation_ratios_period(self, start_year: int, end_year: int, quarter: bool = False):
+    def valuation_ratios_period(self, start_year: int, end_year: int, quarter: bool = False) -> pl.DataFrame:
+        """
+        Retrieve valuation ratios over a period of years or quarters.
+
+        Parameters
+        ----------
+        start_year : int
+            Start year of the period.
+        end_year : int
+            End year of the period.
+        quarter : bool, default=False
+            If True, returns quarterly ratios.
+
+        Returns
+        -------
+        pl.DataFrame
+            Polars DataFrame with valuation ratios over the specified period.
+        Notes
+        -----
+        Only current/latest valuation ratios are supported; historical valuation is not implemented.
+        """
         return self._financials_period("valuation_ratios", start_year, end_year, 'ratios', quarter)

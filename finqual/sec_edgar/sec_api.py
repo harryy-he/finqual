@@ -1,4 +1,3 @@
-from typing import Optional
 import requests
 import polars as pl
 import functools
@@ -11,8 +10,25 @@ import io
 from finqual.sec_edgar.entities.exceptions import IdCodeNotFoundError
 from finqual.sec_edgar.entities.models import IdCode
 
-def weak_lru(maxsize=128, typed=False):
-    """LRU Cache decorator that keeps a weak reference to 'self'"""
+def weak_lru(maxsize: int = 128, typed: bool = False):
+    """
+    LRU cache decorator that stores a **weak reference to `self`**.
+
+    This pattern allows caching of instance methods while preventing memory leaks
+    by avoiding strong references to the class instance.
+
+    Parameters
+    ----------
+    maxsize : int, default 128
+        Maximum size of the LRU cache.
+    typed : bool, default False
+        Whether to consider function argument types as part of the cache key.
+
+    Returns
+    -------
+    callable
+        Decorated method with LRU caching applied.
+    """
     def wrapper(func):
 
         @functools.lru_cache(maxsize, typed)
@@ -28,7 +44,24 @@ def weak_lru(maxsize=128, typed=False):
     return wrapper
 
 def map_missing_frames(df: pl.DataFrame) -> pl.DataFrame:
+    """
+    Fill missing SEC XBRL `frame` values using surrounding context.
 
+    SEC data often contains missing or inconsistent `frame` entries.
+    This function builds fallback mappings based on start/end dates and
+    applies several cleaning and consistency rules.
+
+    Parameters
+    ----------
+    df : pl.DataFrame
+        SEC Company Facts dataframe containing ``key``, ``start``, ``end``,
+        ``frame`` and associated metadata.
+
+    Returns
+    -------
+    pl.DataFrame
+        Frame-consistent and cleaned dataframe.
+    """
     # Creating mapping based on "key", "end" and "frame" columns
     frame_map_se = (
         df.filter(pl.col("frame").is_not_null())
@@ -39,7 +72,7 @@ def map_missing_frames(df: pl.DataFrame) -> pl.DataFrame:
 
     frame_map_e = (
         df.filter(pl.col("frame").is_not_null())
-        .select(["end","frame"])
+        .select(["end", "frame"])
         .unique()
         .rename({"frame": "frame_e"})
     )
@@ -79,9 +112,20 @@ def map_missing_frames(df: pl.DataFrame) -> pl.DataFrame:
 
 def convert_to_quarters(df: pl.DataFrame) -> pl.DataFrame:
     """
-    Convert cumulative SEC values into true quarter-by-quarter values.
-    Works on a Polars DataFrame with columns: key, start, end, value, ...
-    Handles all keys automatically.
+    Convert cumulative financial values into true quarterly values.
+
+    SEC Company Facts reports some values cumulatively.
+    This converts them into Q1 / Q2 / Q3 / Q4 values automatically.
+
+    Parameters
+    ----------
+    df : pl.DataFrame
+        Input dataframe containing period-based SEC data (start, end, value, frame).
+
+    Returns
+    -------
+    pl.DataFrame
+        Updated dataframe including ``quarter_val`` and corrected ``val`` fields.
     """
 
     # Ensure dates are parsed
@@ -128,19 +172,62 @@ def convert_to_quarters(df: pl.DataFrame) -> pl.DataFrame:
     return df_quarters.select(["key", "start", "end", "quarter_val", "val", "unit", "frame", "frame_map", "form", "fp"])
 
 class SecApi:
+    """
+    Interface for interacting with SEC EDGAR endpoints and standardized financial data.
 
-    def __init__(self, ticker_or_cik):        
+    This class wraps SEC Company Facts, Submissions, and mapping utilities.
+    It automatically extracts:
+    - CIK metadata (CIK, ticker, name, exchange)
+    - CompanyFacts financials
+    - Taxonomy type (US-GAAP or IFRS)
+    - Currency
+    - DEI values
+    - Sector
+    - Latest 10-K year
+
+    Attributes
+    ----------
+    cik : str
+        10-digit CIK identifier.
+    ticker : str
+        Public ticker symbol.
+    name : str
+        Full company name.
+    exchange : str
+        Listing exchange (e.g., NASDAQ).
+    sec_data : pl.DataFrame
+        Processed financial facts.
+    taxonomy : str
+        One of ``us-gaap`` or ``ifrs-full``.
+    currency : str
+        Primary reporting currency.
+    dei : dict
+        DEI data extracted from Company Facts.
+    latest_10k : int or None
+        Latest fiscal year reported in a 10-K filing.
+    sector : str
+        Industry sector based on SEC submissions.
+    """
+    def __init__(self, ticker_or_cik: str | int):
+        """
+        Initialize SEC client and retrieve all company-level metadata and facts.
+
+        Parameters
+        ----------
+        ticker_or_cik : str or int
+            Stock ticker (e.g., "AAPL") or raw CIK (e.g., "0000320193").
+        """
         self.headers = {"Accept": "application/json, text/plain, */*",
-                            "Accept-Language": "en-US,en;q=0.9",
-                            "Origin": "https://www.nasdaq.com",
-                            "Referer": "https://www.nasdaq.com",
-                            "User-Agent": 'YourName (your@email.com)',
-                            'Accept-Encoding': 'gzip, deflate',
-                            }
+                        "Accept-Language": "en-US,en;q=0.9",
+                        "Origin": "https://www.nasdaq.com",
+                        "Referer": "https://www.nasdaq.com",
+                        "User-Agent": 'YourName (your@email.com)',
+                        'Accept-Encoding': 'gzip, deflate',
+                        }
         
         id_data = self.get_id_code(ticker_or_cik)
         
-        self.cik = id_data.cik #TODO: later on this can be directly assigned with the basemodel IdCode
+        self.cik = id_data.cik  # TODO: later on this can be directly assigned with the basemodel IdCode
         self.name = id_data.name
         self.ticker = id_data.ticker
         self.exchange = id_data.exchange
@@ -166,7 +253,24 @@ class SecApi:
     # --- Company Facts
 
     @limits(calls=10, period=1)
-    def process_company_facts(self):
+    def process_company_facts(self) -> tuple[pl.DataFrame, str, str, dict]:
+        """
+        Download and process ``companyfacts`` records from the SEC API.
+
+        Returns
+        -------
+        tuple
+            (df, taxonomy, currency, dei)
+
+            - **df** : polars.DataFrame
+              Cleaned and quarterly-normalized company facts.
+            - **taxonomy** : str
+              Reporting taxonomy.
+            - **currency** : str
+              Most frequent reporting currency.
+            - **dei** : dict
+              Raw DEI (entity information) block.
+        """
         url = f"https://data.sec.gov/api/xbrl/companyfacts/CIK{self.cik}.json"
 
         rows = []
@@ -245,8 +349,25 @@ class SecApi:
     # --- CIK code
 
     @weak_lru(maxsize=4)
-    def get_id_code(self, ticker_or_cik: str | int):
+    def get_id_code(self, ticker_or_cik: str | int) -> IdCode:
+        """
+        Resolve a ticker or raw CIK to a full IdCode object.
 
+        Parameters
+        ----------
+        ticker_or_cik : str or int
+            Ticker (e.g. ``'AAPL'``) or numeric CIK.
+
+        Returns
+        -------
+        IdCode
+            Normalized identifier record.
+
+        Raises
+        ------
+        IdCodeNotFoundError
+            If the ticker or CIK is not found in the SEC index.
+        """
         url = "https://www.sec.gov/files/company_tickers_exchange.json"
         ticker_or_cik = str(ticker_or_cik)
         
@@ -271,8 +392,20 @@ class SecApi:
     # --- Company submissions
 
     @limits(calls=10, period=1)
-    def process_company_submissions(self):
+    def process_company_submissions(self) -> tuple[int | None, str]:
+        """
+        Download and parse the SEC ``submissions`` file for the company.
 
+        Returns
+        -------
+        tuple
+            (latest_10k, sector)
+
+            - **latest_10k** : int or None
+              Most recent fiscal year filed as a 10-K or 20-F.
+            - **sector** : str
+              SIC industry description.
+        """
         url = 'https://data.sec.gov/submissions/CIK' + self.cik + '.json'
         response = requests.get(url, headers=self.headers)
         json_request = response.json()
@@ -299,8 +432,16 @@ class SecApi:
     # --- In-class methods (no downloads)
 
     @weak_lru(maxsize=4)
-    def get_annual_quarter(self):
+    def get_annual_quarter(self) -> int:
+        """
+        Determine which quarter represents the company's fiscal year-end
+        (e.g., many firms have FY ending in Q4, some in Q1, etc.).
 
+        Returns
+        -------
+        int
+            Fiscal year-end quarter number (1–4).
+        """
         df_filter = self.sec_data.filter(pl.col("form").cast(pl.Utf8).is_in(["10-K", "8-K", "6-K", "20-F", "40-F", "6-F"]))
         frame_str = pl.col("frame").cast(pl.Utf8)
 
@@ -318,7 +459,21 @@ class SecApi:
 
     @weak_lru(maxsize=4)
     def get_shares(self, year: int, quarter: int | None = None) -> int | None:
+        """
+        Retrieve outstanding share count for a given year and quarter.
 
+        Parameters
+        ----------
+        year : int
+            Fiscal year (calendar CY).
+        quarter : int, optional
+            Quarter number (1–4). If omitted, uses fiscal year-end quarter.
+
+        Returns
+        -------
+        int or None
+            Share count, or None if unavailable.
+        """
         annual_quarter = self.get_annual_quarter()
 
         # --- Compute lookup values
@@ -360,8 +515,21 @@ class SecApi:
                 return None
 
     @weak_lru(maxsize=4)
-    def align_fy_year(self, instant: bool):
+    def align_fy_year(self, instant: bool) -> int:
+        """
+        Compute fiscal-year alignment shift between SEC reporting and calendar
+        year frames.
 
+        Parameters
+        ----------
+        instant : bool
+            Whether to use instant-type frames (frame contains ``"I"``).
+
+        Returns
+        -------
+        int
+            Shift in years required to align SEC fiscal years to calendar years.
+        """
         last_year = self.latest_10k
 
         if last_year is None:
@@ -393,7 +561,21 @@ class SecApi:
 
     @weak_lru(maxsize=4)
     def financial_data_period(self, year: int, quarter: int | None = None) -> pl.DataFrame:
+        """
+        Return SEC financial data for a given year or year-quarter.
 
+        Parameters
+        ----------
+        year : int
+            Calendar year.
+        quarter : int, optional
+            Quarter (1–4). If omitted, returns full-year data.
+
+        Returns
+        -------
+        polars.DataFrame
+            Records matching the period's ``frame_map``.
+        """
         annual_quarter = self.get_annual_quarter()
 
         # Filtering
