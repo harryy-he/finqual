@@ -2,7 +2,7 @@ import finqual as fq
 
 tickers = [1018724, "NVDA", "ASML"]  # You can add more tickers if needed
 start = 2020
-end = 2025
+end = 2024
 quarter = 3  # For quarterly data
 
 for ticker in tickers:
@@ -17,7 +17,7 @@ for ticker in tickers:
 
     # TTM
     df_inc_ttm = fq_ticker.income_stmt_ttm().to_pandas()
-    df_bs_ttm = fq_ticker.income_stmt_ttm().to_pandas()
+    df_bs_ttm = fq_ticker.balance_sheet_ttm().to_pandas()
     df_cf_ttm = fq_ticker.cash_flow_ttm().to_pandas()  # Get annual income statements for end
 
     # Period Data
