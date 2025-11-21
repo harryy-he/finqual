@@ -563,7 +563,7 @@ class Finqual:
                 .group_by(["yf", "value"])
                 .agg(pl.col("prob").sum().alias("total_prob"))
                 .sort(["yf", "total_prob", "value"], descending=[False, True, False])
-                .with_columns(pl.arange(0, pl.count()).alias("row_num"))  # stable tie-breaker
+                .with_columns(pl.arange(0, pl.len()).alias("row_num"))  # stable tie-breaker
                 .unique(subset="yf", keep="first")  # deterministic now
                 .filter(pl.col("total_prob") >= tolerance)
                 .drop("row_num")  # optional: remove tie-breaker
