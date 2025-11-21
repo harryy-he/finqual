@@ -537,7 +537,7 @@ class Finqual:
                 tree = NodeTree(nodes_copy)
 
                 tree.load_sec_data(sec_data_dict)
-                tree.get_all_values()
+                tree.get_all_values()   # TODO: this is not deterministic, see AMZN 2024 "Total Liabilities Net Minority Interest" changes
                 df_tree = tree.to_df()
 
                 if df_tree is not None:
