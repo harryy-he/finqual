@@ -94,7 +94,7 @@ def map_missing_frames(df: pl.DataFrame) -> pl.DataFrame:
         .then(pl.col("frame_map") + "I")
         .otherwise(pl.col("frame_map"))
         .alias("frame_map")
-    ]).unique(subset=["key", "frame_map", "fp"], keep='last')
+    ]).unique(subset=["key", "frame_map", "fp"], keep='last').drop("key_right")
 
     # ---
 
@@ -135,7 +135,7 @@ def convert_to_quarters(df: pl.DataFrame) -> pl.DataFrame:
     ])
 
     # Sort by key + end date
-    df = df.sort(["key", "end"])
+    df = df.sort(["key", "end", "start", "frame_map", "form", "fp"])
 
     # Compute quarter values within each key
     df_quarters = df.with_columns([
@@ -584,7 +584,6 @@ class SecApi:
         inst_lookup_val = f"CY{year}Q{annual_quarter}I" if quarter is None else f"CY{year}Q{quarter}I"
 
         data = self.sec_data.filter(pl.col("frame_map").cast(pl.Utf8).is_in([dur_lookup_val, inst_lookup_val]))
-
         data = data.unique()
 
         return data
