@@ -119,14 +119,18 @@ class CCA:
         """
 
         def fetch_ratios(ticker: str):
-            fq_instance = Finqual(ticker)
-            func = getattr(fq_instance, method_name)
-            df_ratio = func(year, quarter)
-            if df_ratio is not None and len(df_ratio) > 0:
-                df_ratio = df_ratio.with_columns(pl.lit(ticker).alias("Ticker"))
-            del fq_instance
-            gc.collect()
-            return df_ratio
+            try:
+                fq_instance = Finqual(ticker)
+                func = getattr(fq_instance, method_name)
+                df_ratio = func(year, quarter)
+                if df_ratio is not None and len(df_ratio) > 0:
+                    df_ratio = df_ratio.with_columns(pl.lit(ticker).alias("Ticker"))
+                del fq_instance
+                gc.collect()
+                return df_ratio
+
+            except:
+                return None
 
         tickers = self.get_c(n)
         lazy_frames = []
@@ -185,13 +189,16 @@ class CCA:
             DataFrame containing the ratios over the specified period.
         """
         def fetch_ratios(ticker: str):
-            fq_instance = Finqual(ticker)
-            func = getattr(fq_instance, method_name)
-            df_ratio = func(start_year, end_year, quarter)
-            df_ratio = df_ratio.with_columns(pl.lit(ticker).alias("Ticker"))
-            del fq_instance
-            gc.collect()
-            return df_ratio
+            try:
+                fq_instance = Finqual(ticker)
+                func = getattr(fq_instance, method_name)
+                df_ratio = func(start_year, end_year, quarter)
+                df_ratio = df_ratio.with_columns(pl.lit(ticker).alias("Ticker"))
+                del fq_instance
+                gc.collect()
+                return df_ratio
+            except:
+                return None
 
         tickers = self.get_c(n)
         lazy_frames = []
