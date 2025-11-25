@@ -266,14 +266,14 @@ class Finqual:
     def __init__(self, ticker_or_cik: str | int):
         self.ticker_or_cik = ticker_or_cik
         self.sec_edgar = SecApi(ticker_or_cik)
-        self.ticker = self.sec_edgar.ticker
-        self.cik = self.sec_edgar.cik
-        self.taxonomy = self.sec_edgar.taxonomy
+        self.ticker = self.sec_edgar.id_data.ticker
+        self.cik = self.sec_edgar.id_data.cik
+        self.taxonomy = self.sec_edgar.facts_data.taxonomy
+        self.sector = self.sec_edgar.submissions_data.sector
 
         self.trees = self.select_tree()
         self.labels = self.select_label()
 
-        self.sector = self.sec_edgar.sector
 
     @staticmethod
     def load_trees(file_name: str) -> dict[str, list[Node]]:
@@ -655,9 +655,12 @@ class Finqual:
             expected_frame = f"CY{year}" if quarter is None else f"CY{year}Q{quarter}"
 
             if item == "Gross Profit":
-                exists = any(k == "GrossProfit" and f == expected_frame
-                             for k, f in zip(self.sec_edgar.sec_data['key'], self.sec_edgar.sec_data['frame_map'])
-                             )
+                exists = any(
+                    k == "GrossProfit" and f == expected_frame
+                    for k, f in zip(
+                        self.sec_edgar.facts_data.sec_data['key'], 
+                        self.sec_edgar.facts_data.sec_data['frame_map'])
+                    )
                 if not exists:
                     continue
 

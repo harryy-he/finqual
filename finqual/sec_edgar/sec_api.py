@@ -1,3 +1,4 @@
+import pandas as pd
 import requests
 import polars as pl
 import functools
@@ -7,8 +8,9 @@ import gzip
 import ijson
 import io
 
-from finqual.sec_edgar.entities.exceptions import IdCodeNotFoundError
-from finqual.sec_edgar.entities.models import IdCode
+from finqual.config.headers import sec_headers
+from finqual.sec_edgar.entities.exceptions import CompanyIdCodeNotFoundError
+from finqual.sec_edgar.entities.models import CompanyFacts, CompanySubmission, CompanyIdCode
 
 def weak_lru(maxsize: int = 128, typed: bool = False):
     """
@@ -217,38 +219,10 @@ class SecApi:
         ticker_or_cik : str or int
             Stock ticker (e.g., "AAPL") or raw CIK (e.g., "0000320193").
         """
-        self.headers = {"Accept": "application/json, text/plain, */*",
-                        "Accept-Language": "en-US,en;q=0.9",
-                        "Origin": "https://www.nasdaq.com",
-                        "Referer": "https://www.nasdaq.com",
-                        "User-Agent": 'YourName (your@email.com)',
-                        'Accept-Encoding': 'gzip, deflate',
-                        }
-        
-        id_data = self.get_id_code(ticker_or_cik)
-        
-        self.cik = id_data.cik  # TODO: later on this can be directly assigned with the basemodel IdCode
-        self.name = id_data.name
-        self.ticker = id_data.ticker
-        self.exchange = id_data.exchange
-        
-        del id_data
-
-        facts_data = self.process_company_facts()
-
-        self.sec_data = facts_data[0]
-        self.taxonomy = facts_data[1]
-        self.currency = facts_data[2]
-        self.dei = facts_data[3]
-
-        del facts_data
-
-        submissions_data = self.process_company_submissions()
-
-        self.latest_10k = submissions_data[0]
-        self.sector = submissions_data[1]
-
-        del submissions_data
+        self.headers = sec_headers
+        self.id_data = self.get_id_code(ticker_or_cik)
+        self.facts_data = self.process_company_facts()
+        self.submissions_data = self.process_company_submissions()
 
     # --- Company Facts
 
@@ -271,7 +245,7 @@ class SecApi:
             - **dei** : dict
               Raw DEI (entity information) block.
         """
-        url = f"https://data.sec.gov/api/xbrl/companyfacts/CIK{self.cik}.json"
+        url = f"https://data.sec.gov/api/xbrl/companyfacts/CIK{self.id_data.cik}.json"
 
         rows = []
         currency_counts = {}
@@ -343,15 +317,22 @@ class SecApi:
             ])
             .collect()
         )
-
-        return df, taxonomy, preferred_currency, dei
+        
+        company_facts = CompanyFacts(
+            sec_data = df,
+            taxonomy = taxonomy,
+            currency = preferred_currency,
+            dei = dei
+        )
+        
+        return company_facts
 
     # --- CIK code
 
     @weak_lru(maxsize=4)
-    def get_id_code(self, ticker_or_cik: str | int) -> IdCode:
+    def get_id_code(self, ticker_or_cik: str | int) -> CompanyIdCode:
         """
-        Resolve a ticker or raw CIK to a full IdCode object.
+        Resolve a ticker or raw CIK to a full CompanyIdCode object.
 
         Parameters
         ----------
@@ -360,12 +341,12 @@ class SecApi:
 
         Returns
         -------
-        IdCode
+        CompanyIdCode
             Normalized identifier record.
 
         Raises
         ------
-        IdCodeNotFoundError
+        CompanyIdCodeNotFoundError
             If the ticker or CIK is not found in the SEC index.
         """
         url = "https://www.sec.gov/files/company_tickers_exchange.json"
@@ -385,14 +366,14 @@ class SecApi:
                         "ticker": ticker,
                         "exchange": exchange
                         } 
-                    return IdCode(**payload)
+                    return CompanyIdCode(**payload)
                 
-            raise IdCodeNotFoundError(ticker_or_cik)
+            raise CompanyIdCodeNotFoundError(ticker_or_cik)
 
     # --- Company submissions
 
     @limits(calls=10, period=1)
-    def process_company_submissions(self) -> tuple[int | None, str]:
+    def process_company_submissions(self) -> CompanySubmission:
         """
         Download and parse the SEC ``submissions`` file for the company.
 
@@ -406,7 +387,7 @@ class SecApi:
             - **sector** : str
               SIC industry description.
         """
-        url = 'https://data.sec.gov/submissions/CIK' + self.cik + '.json'
+        url = 'https://data.sec.gov/submissions/CIK' + self.id_data.cik + '.json'
         response = requests.get(url, headers=self.headers)
         json_request = response.json()
 
@@ -426,8 +407,8 @@ class SecApi:
         # --- Sector
 
         sector = json_request['sicDescription']
-
-        return latest_10k, sector
+        
+        return CompanySubmission(latest_10k=latest_10k, sector=sector)
 
     # --- In-class methods (no downloads)
 
@@ -442,7 +423,7 @@ class SecApi:
         int
             Fiscal year-end quarter number (1–4).
         """
-        df_filter = self.sec_data.filter(pl.col("form").cast(pl.Utf8).is_in(["10-K", "8-K", "6-K", "20-F", "40-F", "6-F"]))
+        df_filter = self.facts_data.sec_data.filter(pl.col("form").cast(pl.Utf8).is_in(["10-K", "8-K", "6-K", "20-F", "40-F", "6-F"]))
         frame_str = pl.col("frame").cast(pl.Utf8)
 
         df_filter = (df_filter
@@ -488,7 +469,7 @@ class SecApi:
         # Using DEI dataframe...
         try:
             # Filtering
-            shares = self.dei['EntityCommonStockSharesOutstanding']['units']['shares']
+            shares = self.facts_data.dei['EntityCommonStockSharesOutstanding']['units']['shares']
             df_shares = pl.DataFrame(shares)
 
             try:
@@ -504,7 +485,7 @@ class SecApi:
         # ...else use the SEC data
         except (IndexError, KeyError):
             try:
-                df_shares = self.sec_data.filter(pl.col("key").cast(pl.Utf8).is_in(["CommonStockSharesOutstanding", 'WeightedAverageNumberOfSharesOutstandingBasic']))
+                df_shares = self.facts_data.sec_data.filter(pl.col("key").cast(pl.Utf8).is_in(["CommonStockSharesOutstanding", 'WeightedAverageNumberOfSharesOutstandingBasic']))
                 df_shares_i = df_shares.filter(pl.col("frame").cast(pl.Utf8).is_in([inst_lookup_val_prev]))
                 shares = df_shares_i.item(0, 'val')
 
@@ -530,14 +511,14 @@ class SecApi:
         int
             Shift in years required to align SEC fiscal years to calendar years.
         """
-        last_year = self.latest_10k
+        last_year = self.submissions_data.latest_10k
 
         if last_year is None:
             return 0
 
         else:
             # ---
-            df = self.sec_data.select(["form", "frame", "fp"])
+            df = self.facts_data.sec_data.select(["form", "frame", "fp"])
 
             df_filter = df.filter(pl.col("form").cast(pl.Utf8).is_in(["10-K", "8-K", "6-K", "20-F", "40-F", "6-F"]))
 
@@ -583,7 +564,7 @@ class SecApi:
         dur_lookup_val = f"CY{year}" if quarter is None else f"CY{year}Q{quarter}"
         inst_lookup_val = f"CY{year}Q{annual_quarter}I" if quarter is None else f"CY{year}Q{quarter}I"
 
-        data = self.sec_data.filter(pl.col("frame_map").cast(pl.Utf8).is_in([dur_lookup_val, inst_lookup_val]))
+        data = self.facts_data.sec_data.filter(pl.col("frame_map").cast(pl.Utf8).is_in([dur_lookup_val, inst_lookup_val]))
         data = data.unique()
 
         return data

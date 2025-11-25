@@ -150,8 +150,6 @@ class NodeTree:
             for root in self.node_tree:
                 collect(root)
 
-            return self.node_tree
-
     def to_df(self) -> pl.DataFrame:
         """
         Convert all nodes with computed values into a Polars DataFrame.
