@@ -263,7 +263,7 @@
         "2021": 2500000000.0
       }
     ],
-    "cash_flow": [
+    "cashflow": [
       {
         "metric": "Operating Cash Flow",
         "2024": 64089000000.0,
