@@ -1,2 +1,1 @@
-- Trailing Twelve Months for Valuation Metrics (as prices reflect last twelve months)
 - Insurers/Banks statement
