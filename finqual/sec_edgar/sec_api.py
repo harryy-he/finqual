@@ -402,13 +402,14 @@ class SecApi:
             latest_10k = year
 
         else:
+            report_date = None
             latest_10k = None
 
         # --- Sector
 
         sector = json_request['sicDescription']
         
-        return CompanySubmission(latest_10k=latest_10k, sector=sector)
+        return CompanySubmission(latest_10k=latest_10k, report_date=report_date, sector=sector)
 
     # --- In-class methods (no downloads)
 

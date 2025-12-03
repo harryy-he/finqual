@@ -19,5 +19,6 @@ class CompanyFacts(BaseModel):
     
 class CompanySubmission(BaseModel):
     latest_10k: int
+    report_date: str
     sector: str | None
     
