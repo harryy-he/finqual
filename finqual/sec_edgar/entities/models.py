@@ -5,7 +5,7 @@ class CompanyIdCode(BaseModel):
     cik: str
     name: str
     ticker: str
-    exchange: str 
+    exchange: str | None
     
 class CompanyFacts(BaseModel):
     sec_data: pl.DataFrame
