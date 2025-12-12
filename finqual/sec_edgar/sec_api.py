@@ -1,4 +1,3 @@
-import pandas as pd
 import requests
 import polars as pl
 import functools
@@ -187,28 +186,6 @@ class SecApi:
     - Sector
     - Latest 10-K year
 
-    Attributes
-    ----------
-    cik : str
-        10-digit CIK identifier.
-    ticker : str
-        Public ticker symbol.
-    name : str
-        Full company name.
-    exchange : str
-        Listing exchange (e.g., NASDAQ).
-    sec_data : pl.DataFrame
-        Processed financial facts.
-    taxonomy : str
-        One of ``us-gaap`` or ``ifrs-full``.
-    currency : str
-        Primary reporting currency.
-    dei : dict
-        DEI data extracted from Company Facts.
-    latest_10k : int or None
-        Latest fiscal year reported in a 10-K filing.
-    sector : str
-        Industry sector based on SEC submissions.
     """
     def __init__(self, ticker_or_cik: str | int):
         """
@@ -296,15 +273,11 @@ class SecApi:
 
         preferred_currency = max(currency_counts, key=currency_counts.get)
 
-        df = pl.DataFrame(rows)
-        df = df.filter(pl.col("unit").is_in(["shares", preferred_currency]))
-
-        df = map_missing_frames(df)
-        df = convert_to_quarters(df)
-
-        # Lazy casting and deduplication
         df = (
-            df.lazy()
+            pl.LazyFrame(rows)
+            .filter(pl.col("unit").is_in(["shares", preferred_currency]))
+            .pipe(map_missing_frames)  # <-- must accept LazyFrame
+            .pipe(convert_to_quarters)  # <-- must accept LazyFrame
             .with_columns([
                 pl.col("quarter_val").cast(pl.Float64),
                 pl.col("val").cast(pl.Float64),
@@ -319,10 +292,10 @@ class SecApi:
         )
         
         company_facts = CompanyFacts(
-            sec_data = df,
-            taxonomy = taxonomy,
-            currency = preferred_currency,
-            dei = dei
+            sec_data=df,
+            taxonomy=taxonomy,
+            currency=preferred_currency,
+            dei=dei
         )
         
         return company_facts
