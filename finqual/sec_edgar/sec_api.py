@@ -364,13 +364,28 @@ class SecApi:
         response = requests.get(url, headers=self.headers)
         json_request = response.json()
 
+        df = pl.DataFrame(json_request['filings']['recent'])
+
+        # --- Getting URLs
+
+        df = df.filter(pl.col("primaryDocDescription").is_in(["10-K", "10-Q", "20-F", "40-F", "6-K", "10-K/A"]))
+
+        df = df.with_columns(
+            (pl.lit("https://www.sec.gov/ix?doc=/Archives/edgar/data/")
+                + pl.col("accessionNumber").str.slice(0, 10)
+                + "/"
+                + pl.col("accessionNumber").str.replace_all("-", "")
+                + "/"
+                + pl.col("primaryDocument")
+                ).alias("url")
+        )
+
         # --- Latest 10K
 
-        df = pl.DataFrame(json_request['filings']['recent'])
-        df = df.filter(pl.col("primaryDocDescription").is_in(["10-K", "20-F"])).head(1)
+        df_latest = df.filter(pl.col("primaryDocDescription").is_in(["10-K", "20-F"])).head(1)
 
-        if len(df) > 0:
-            report_date = df['reportDate'][0]
+        if len(df_latest) > 0:
+            report_date = df_latest['reportDate'][0]
             year = int(report_date[:4])
             latest_10k = year
 
