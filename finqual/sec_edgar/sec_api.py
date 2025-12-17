@@ -271,6 +271,57 @@ class SecApi:
                     # if you only want first taxonomy, break now
                     break
 
+        # import orjson
+        #
+        # with requests.get(url, headers=self.headers) as r:
+        #     r.raise_for_status()
+        #     data = orjson.loads(r.content)
+        #
+        # facts = data.get("facts", {})
+        #
+        # for tx, fact_dict in facts.items():
+        #
+        #     # --- DEI
+        #     if tx == "dei":
+        #         dei = fact_dict
+        #         continue
+        #
+        #     # --- First taxonomy only
+        #     if tx not in ("us-gaap", "ifrs-full"):
+        #         continue
+        #
+        #     taxonomy = tx
+        #
+        #     for key, value in fact_dict.items():
+        #         units = value.get("units", {})
+        #         desc = value.get("description", "")
+        #
+        #         for unit_type, entries in units.items():
+        #             currency_counts[unit_type] = currency_counts.get(unit_type,
+        #                                                              0) + 1
+        #
+        #             for entry in entries:
+        #                 form = entry.get("form")
+        #                 if form not in {
+        #                     "10-K", "10-Q", "8-K", "20-F",
+        #                     "40-F", "6-F", "6-K", "10-K/A",
+        #                 }:
+        #                     continue
+        #
+        #                 rows.append({
+        #                     "key": key,
+        #                     "start": entry.get("start", "None"),
+        #                     "end": entry.get("end", "None"),
+        #                     "description": desc,
+        #                     "val": entry.get("val"),
+        #                     "unit": unit_type,
+        #                     "frame": entry.get("frame"),
+        #                     "form": form,
+        #                     "fp": entry.get("fp"),
+        #                 })
+        #
+        #     break  # enforce first taxonomy only
+
         preferred_currency = max(currency_counts, key=currency_counts.get)
 
         df = (
