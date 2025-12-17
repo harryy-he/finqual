@@ -271,6 +271,57 @@ class SecApi:
                     # if you only want first taxonomy, break now
                     break
 
+        # import orjson
+        #
+        # with requests.get(url, headers=self.headers) as r:
+        #     r.raise_for_status()
+        #     data = orjson.loads(r.content)
+        #
+        # facts = data.get("facts", {})
+        #
+        # for tx, fact_dict in facts.items():
+        #
+        #     # --- DEI
+        #     if tx == "dei":
+        #         dei = fact_dict
+        #         continue
+        #
+        #     # --- First taxonomy only
+        #     if tx not in ("us-gaap", "ifrs-full"):
+        #         continue
+        #
+        #     taxonomy = tx
+        #
+        #     for key, value in fact_dict.items():
+        #         units = value.get("units", {})
+        #         desc = value.get("description", "")
+        #
+        #         for unit_type, entries in units.items():
+        #             currency_counts[unit_type] = currency_counts.get(unit_type,
+        #                                                              0) + 1
+        #
+        #             for entry in entries:
+        #                 form = entry.get("form")
+        #                 if form not in {
+        #                     "10-K", "10-Q", "8-K", "20-F",
+        #                     "40-F", "6-F", "6-K", "10-K/A",
+        #                 }:
+        #                     continue
+        #
+        #                 rows.append({
+        #                     "key": key,
+        #                     "start": entry.get("start", "None"),
+        #                     "end": entry.get("end", "None"),
+        #                     "description": desc,
+        #                     "val": entry.get("val"),
+        #                     "unit": unit_type,
+        #                     "frame": entry.get("frame"),
+        #                     "form": form,
+        #                     "fp": entry.get("fp"),
+        #                 })
+        #
+        #     break  # enforce first taxonomy only
+
         preferred_currency = max(currency_counts, key=currency_counts.get)
 
         df = (
@@ -364,13 +415,30 @@ class SecApi:
         response = requests.get(url, headers=self.headers)
         json_request = response.json()
 
+        df = pl.DataFrame(json_request['filings']['recent'])
+
+        # --- Getting URLs
+
+        df = df.filter(pl.col("primaryDocDescription").is_in(["10-K", "10-Q", "20-F", "40-F"]))
+
+        df = df.with_columns(
+            (pl.lit("https://www.sec.gov/ix?doc=/Archives/edgar/data/")
+                + pl.col("accessionNumber").str.slice(0, 10)
+                + "/"
+                + pl.col("accessionNumber").str.replace_all("-", "")
+                + "/"
+                + pl.col("primaryDocument")
+             ).alias("URL")
+        )
+
+        df = df.select(["reportDate", "primaryDocDescription", "URL"])
+
         # --- Latest 10K
 
-        df = pl.DataFrame(json_request['filings']['recent'])
-        df = df.filter(pl.col("primaryDocDescription").is_in(["10-K", "20-F"])).head(1)
+        df_latest = df.filter(pl.col("primaryDocDescription").is_in(["10-K", "20-F"])).head(1)
 
-        if len(df) > 0:
-            report_date = df['reportDate'][0]
+        if len(df_latest) > 0:
+            report_date = df_latest['reportDate'][0]
             year = int(report_date[:4])
             latest_10k = year
 
@@ -382,7 +450,7 @@ class SecApi:
 
         sector = json_request['sicDescription']
         
-        return CompanySubmission(latest_10k=latest_10k, report_date=report_date, sector=sector)
+        return CompanySubmission(latest_10k=latest_10k, report_date=report_date, sector=sector, reports=df)
 
     # --- In-class methods (no downloads)
 

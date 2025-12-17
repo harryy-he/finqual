@@ -21,4 +21,9 @@ class CompanySubmission(BaseModel):
     latest_10k: int
     report_date: str
     sector: str | None
+    reports: pl.DataFrame
+
+    model_config = {
+        "arbitrary_types_allowed": True
+    }
     
