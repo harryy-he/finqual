@@ -377,7 +377,7 @@ class SecApi:
                 + pl.col("accessionNumber").str.replace_all("-", "")
                 + "/"
                 + pl.col("primaryDocument")
-                ).alias("URL")
+             ).alias("URL")
         )
 
         df = df["reportDate", "primaryDocDescription", "URL"]
