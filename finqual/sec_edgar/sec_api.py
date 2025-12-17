@@ -368,7 +368,7 @@ class SecApi:
 
         # --- Getting URLs
 
-        df = df.filter(pl.col("primaryDocDescription").is_in(["10-K", "10-Q", "20-F", "40-F", "6-K", "10-K/A"]))
+        df = df.filter(pl.col("primaryDocDescription").is_in(["10-K", "10-Q", "20-F", "40-F", "10-K/A"]))
 
         df = df.with_columns(
             (pl.lit("https://www.sec.gov/ix?doc=/Archives/edgar/data/")
