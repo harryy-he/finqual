@@ -377,8 +377,10 @@ class SecApi:
                 + pl.col("accessionNumber").str.replace_all("-", "")
                 + "/"
                 + pl.col("primaryDocument")
-                ).alias("url")
+                ).alias("URL")
         )
+
+        df = df["reportDate", "primaryDocDescription", "URL"]
 
         # --- Latest 10K
 
@@ -397,7 +399,7 @@ class SecApi:
 
         sector = json_request['sicDescription']
         
-        return CompanySubmission(latest_10k=latest_10k, report_date=report_date, sector=sector)
+        return CompanySubmission(latest_10k=latest_10k, report_date=report_date, sector=sector, reports=df)
 
     # --- In-class methods (no downloads)
 
