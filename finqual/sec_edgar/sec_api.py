@@ -380,7 +380,7 @@ class SecApi:
              ).alias("URL")
         )
 
-        df = df["reportDate", "primaryDocDescription", "URL"]
+        df = df.select(["reportDate", "primaryDocDescription", "URL"])
 
         # --- Latest 10K
 
