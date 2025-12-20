@@ -348,41 +348,65 @@ class SecApi:
     @limits(calls=10, period=1)
     def process_company_submissions(self) -> CompanySubmission:
         """
-        Download and parse the SEC ``submissions`` file for the company.
+        Download and parse the SEC `submissions` file for the company.
 
         Returns
         -------
-        tuple
-            (latest_10k, sector)
-
-            - **latest_10k** : int or None
-              Most recent fiscal year filed as a 10-K or 20-F.
-            - **sector** : str
-              SIC industry description.
+        CompanySubmission
+            - latest_10k : int or None
+                Most recent fiscal year filed as a 10-K or 20-F.
+            - report_date : str or None
+                Report date of the latest 10-K or 20-F.
+            - sector : str
+                SIC industry description.
+            - reports : polars.DataFrame
+                Filtered filings with URLs.
         """
-        url = 'https://data.sec.gov/submissions/CIK' + self.id_data.cik + '.json'
+
+        url = f"https://data.sec.gov/submissions/CIK{self.id_data.cik}.json"
         response = requests.get(url, headers=self.headers)
+        response.raise_for_status()
+
         json_request = response.json()
 
-        # --- Latest 10K
+        df = pl.DataFrame(json_request["filings"]["recent"])
 
-        df = pl.DataFrame(json_request['filings']['recent'])
-        df = df.filter(pl.col("primaryDocDescription").is_in(["10-K", "20-F"])).head(1)
+        # --- Filter relevant filings
+        df = df.filter(pl.col("primaryDocDescription").is_in(["10-K", "10-Q", "20-F", "40-F"]))
 
-        if len(df) > 0:
-            report_date = df['reportDate'][0]
-            year = int(report_date[:4])
-            latest_10k = year
+        # --- Build document URLs
+        df = df.with_columns(
+            (pl.lit("https://www.sec.gov/ix?doc=/Archives/edgar/data/")
+            + pl.col("accessionNumber").str.slice(0, 10)
+            + "/"
+            + pl.col("accessionNumber").str.replace_all("-", "")
+            + "/"
+            + pl.col("primaryDocument")
+            ).alias("URL")
+        )
+
+        df = df.select(["reportDate", "primaryDocDescription", "URL"])
+
+        # --- Latest Annual Reports
+        df_latest_annual = (df.filter(pl.col("primaryDocDescription").is_in(["10-K", "20-F"])).head(1))
+
+        if len(df_latest_annual) > 0:
+            report_date = df_latest_annual["reportDate"][0]
+            latest_10k = int(report_date[:4])
 
         else:
             report_date = None
             latest_10k = None
 
         # --- Sector
+        sector = json_request.get("sicDescription")
 
-        sector = json_request['sicDescription']
-        
-        return CompanySubmission(latest_10k=latest_10k, report_date=report_date, sector=sector)
+        return CompanySubmission(
+            latest_10k=latest_10k,
+            report_date=report_date,
+            sector=sector,
+            reports=df,
+        )
 
     # --- In-class methods (no downloads)
 
@@ -513,6 +537,61 @@ class SecApi:
             diff = last_year - last_fy
 
             return diff
+
+    @weak_lru(maxsize=4)
+    def latest_report(self, quarterly: bool) -> int | tuple[int, int]:
+        """
+        Return latest frames available for annual or quarterly data
+
+        Parameters
+        ----------
+        year : int
+            Calendar year.
+        quarter : int, optional
+            Quarter (1–4). If omitted, returns full-year data.
+
+        Returns
+        -------
+        polars.DataFrame
+            Records matching the period's ``frame_map``.
+        """
+
+        df = self.facts_data.sec_data.select("form", pl.col("frame_map").cast(pl.Utf8).alias("frame_map"),)
+
+        df_annual, df_quarterly = (
+            df.filter(pl.col("form").is_in(["10-K", "20-F"]))
+            .filter(pl.col("frame_map").str.len_chars() == 6)
+            .group_by("frame_map")
+            .len()
+            .sort("frame_map", descending=True),
+
+            df.filter(pl.col("form").is_in(["10-Q", "40-F"]))
+            .filter(pl.col("frame_map").str.len_chars() == 8)
+            .group_by("frame_map")
+            .len()
+            .filter(pl.col("len") >= 20)
+            .sort("frame_map", descending=True),
+        )
+
+        annual_frame = df_annual["frame_map"][0]  # e.g. "CY2025"
+        quarterly_frame = df_quarterly["frame_map"][0]  # e.g. "CY2025Q4"
+
+        latest_annual = int(annual_frame.removeprefix("CY"))
+        latest_quarter_year, latest_quarter_quarter = map(int, quarterly_frame.removeprefix("CY").split("Q"))
+
+        # --- Checking that latest year
+
+        annual_quarter = self.get_annual_quarter()
+
+        if latest_annual == latest_quarter_year:
+            if latest_quarter_quarter < latest_annual:
+                latest_quarter_quarter = annual_quarter
+
+        if quarterly:
+            return latest_quarter_year, latest_quarter_quarter
+
+        else:
+            return latest_annual
 
     @weak_lru(maxsize=4)
     def financial_data_period(self, year: int, quarter: int | None = None) -> pl.DataFrame:

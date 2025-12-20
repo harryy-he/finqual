@@ -18,7 +18,12 @@ class CompanyFacts(BaseModel):
     }
     
 class CompanySubmission(BaseModel):
-    latest_10k: int
-    report_date: str
+    latest_10k: int | None
+    report_date: str | None
     sector: str | None
+    reports: pl.DataFrame | None
+
+    model_config = {
+        "arbitrary_types_allowed": True
+    }
     

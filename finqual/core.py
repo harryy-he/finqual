@@ -3,7 +3,6 @@ from .node_classes.node import Node
 from .sec_edgar.sec_api import SecApi
 from .stocktwit import StockTwit
 
-from datetime import datetime
 import functools
 from importlib.resources import files
 import ijson
@@ -991,16 +990,9 @@ class Finqual:
         -----
         If insufficient quarterly data exists, falls back to annual data for TTM calculation.
         """
-        current_year = int(datetime.now().year)
+        current_year, current_quarter = self.sec_edgar.latest_report(quarterly=True)
 
-        # TODO: find latest, change previous_quarter method
-        # df_sec = self.sec_edgar.sec_data
-        # df_sec = df_sec.with_columns([pl.col("frame_map").str.extract(r"CY(\d{4})Q\d").cast(pl.Int32).alias("Year"), pl.col("frame_map").str.extract(r"Q(\d)").cast(pl.Int32).alias("Quarter")])
-        #
-        # latest_year = df_sec["Year"].max()
-        # latest_quarter = df_sec.filter(pl.col("Year") == latest_year)["Quarter"].max()
-
-        df_inc = self.income_stmt_period(current_year - 2, current_year + 1, True)
+        df_inc = self.income_stmt_period(current_year - 1, current_year, True)
 
         line_items = df_inc.select(pl.col(df_inc.columns[0]))
 
@@ -1040,8 +1032,8 @@ class Finqual:
         -----
         If no balance sheet data exists, returns NaN for TTM values.
         """
-        current_year = int(datetime.now().year)
-        df_bs = self.balance_sheet_period(current_year - 1, current_year + 1, True)
+        current_year, current_quarter = self.sec_edgar.latest_report(quarterly=True)
+        df_bs = self.balance_sheet(current_year, current_quarter)
 
         line_items = df_bs.select(pl.col(df_bs.columns[0]))
 
@@ -1078,8 +1070,8 @@ class Finqual:
         -----
         Adjusts end cash position to match instantaneous nature of cash in cash flow statement.
         """
-        current_year = int(datetime.now().year)
-        df_cf = self.cash_flow_period(current_year - 2, current_year + 1, True)
+        current_year, current_quarter = self.sec_edgar.latest_report(quarterly=True)
+        df_cf = self.cash_flow_period(current_year - 1, current_year, True)
 
         line_items = df_cf.select(pl.col(df_cf.columns[0]))
 
