@@ -91,6 +91,20 @@ Currently, there are several known limitations that I am aware of from my own te
 - Banks, insurers and other financial institutions have a different financial statement profile that has not been mapped yet
 - Companies that are filing under IFRS (e.g. non-US domiciled companies) have less complete data than US-GAAP companies due to less strict taxonomy mappings
 
+## License
+
+finqual is licensed under the **Business Source License 1.1 (BSL 1.1)**.
+
+The code is source-available and may be used for personal, academic,
+research, and internal evaluation purposes.
+
+Commercial use, including offering finqual as a service, embedding it in
+paid products, or reselling derivative works, is **not permitted** without
+a separate commercial license.
+
+finqual is used internally to process public SEC filings and generate
+proprietary datasets and API services, which are licensed separately.
+
 ## Contact
 
 If you would like to help me out, collaborate or for any other enquiries, please feel free to [email me](mailto:harryhe99@outlook.com).
