@@ -4,6 +4,8 @@
 
 This is a work in progress package that enables users to conduct fundamental financial research, utilising the SEC's data and REST API.
 
+Note that I have launched a REST API service available at [finqual.app](https://finqual.app) (free to use).
+
 ## Installation
 ```
 pip install finqual
