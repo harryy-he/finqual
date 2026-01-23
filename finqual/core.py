@@ -638,11 +638,11 @@ class Finqual:
         df_income = df_income.with_columns(pl.col("total_prob").cast(pl.Float64))
 
         increments = {
-            "Total Revenue": 0.5,
-            "Gross Profit": 0.5,
-            "Operating Income": 0.5,
-            "Pretax Income": 0.5,
-            "Net Income": 0.5
+            "Total Revenue": 1.0,
+            "Gross Profit": 1.0,
+            "Operating Income": 1.0,
+            "Pretax Income": 1.0,
+            "Net Income": 1.0
         }
 
         # ---
