@@ -2,6 +2,7 @@ from .node_classes.node_tree import NodeTree
 from .node_classes.node import Node
 from .sec_edgar.sec_api import SecApi
 from .stocktwit import StockTwit
+from .form_4 import retrieve_form_4
 
 import functools
 from importlib.resources import files
@@ -1376,3 +1377,11 @@ class Finqual:
         Only current/latest valuation ratios are supported; historical valuation is not implemented.
         """
         return self._financials_period("valuation_ratios", start_year, end_year, 'ratios', quarter)
+
+    def get_insider_transactions(self, n: int | None) -> pl.DataFrame:
+
+        url = self.sec_edgar.get_form4(n)["URL"][0]
+
+        return retrieve_form_4(url, self.sec_edgar.headers)
+
+
