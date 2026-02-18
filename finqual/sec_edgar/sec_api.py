@@ -621,3 +621,55 @@ class SecApi:
         data = data.unique()
 
         return data
+
+    @weak_lru(maxsize=4)
+    def get_form4(self, latest: int | None = None) -> pl.DataFrame:
+        """
+        Returns the nth latest insider transaction form .
+
+        Parameters
+        ----------
+        latest : int
+            The "latest" latest insider transaction form, defaults to the latest.
+
+        Returns
+        -------
+        polars.DataFrame
+            Contains the relevant information for the transaction form.
+        """
+
+        if latest is None:
+            latest = 0
+
+        url = f"https://data.sec.gov/submissions/CIK{self.id_data.cik}.json"
+        response = requests.get(url, headers=self.headers)
+        response.raise_for_status()
+
+        json_request = response.json()
+
+        df = pl.DataFrame(json_request["filings"]["recent"])
+
+        # --- Filter relevant filings
+        df = df.filter(pl.col("form").is_in(["4"]))
+
+        # --- Build document URLs
+        df = df.with_columns(
+            (
+                pl.lit("https://www.sec.gov/Archives/edgar/data/")
+                + pl.lit(str(int(self.id_data.cik)))
+                + "/"
+                + pl.col("accessionNumber").str.replace_all("-", "")
+                + "/"
+                + pl.col("primaryDocument")
+                .str.split("/")
+                .list.last()
+            ).alias("URL")
+        )
+
+        # ---
+
+        if len(df) < latest:
+            return None
+
+        else:
+            return df.slice(latest, latest+1)
