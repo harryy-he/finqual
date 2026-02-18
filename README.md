@@ -18,6 +18,7 @@ finqual has the following features:
 - Ability to call the income statement, balance sheet or cash flow statement for any company on SEC's EDGAR system
 - Breakdown of chosen financial ratios for a chosen ticker
 - Conduct comparable company analysis by comparing valuation, liquidity and profitability metrics
+- Retrieve structured insider transaction information
 
 This has four key features that enable better programmatic access compared to other providers:
 - Ability to call up to 10 requests per second, with built-in rate limiter
@@ -70,6 +71,13 @@ fq.CCA("NVDA").valuation_ratios() # Similar to before, but retrieve the valuatio
 ```
 
 ![NVIDIA 2024 Comparable Company Analysis](https://raw.githubusercontent.com/harryy-he/finqual/main/images/nvda_cca_2024.png)
+
+We can also retrieve insider transactions:
+
+```
+fq.Finqual("NVDA").get_insider_transactions(0) # Gets the latest insider transaction filing
+fq.Finqual("NVDA").get_insider_transactions(4) # Gets the 5th latest insider transaction filing
+```
 
 ## Dependencies
 
