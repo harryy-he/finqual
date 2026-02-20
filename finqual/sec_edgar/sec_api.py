@@ -458,11 +458,17 @@ class SecApi:
         # --- Compute lookup values
 
         inst_lookup_val = f"CY{year}Q{annual_quarter}I" if quarter is None else f"CY{year}Q{quarter}I"
+        lookup_val = f"CY{year}Q{annual_quarter}" if quarter is None else f"CY{year}Q{quarter}"
 
-        if annual_quarter == 1:
+        # Lookup values for previous period
+        q = annual_quarter if quarter is None else quarter
+
+        if q == 1:   # If annual report is Q1 or quarter is Q1 then previous period rule changes...
             inst_lookup_val_prev = f"CY{year-1}Q4I" if quarter is None else f"CY{year-1}Q4I"
+            lookup_val_prev = f"CY{year - 1}Q4" if quarter is None else f"CY{year - 1}Q4"
         else:
             inst_lookup_val_prev = f"CY{year}Q{annual_quarter-1}I" if quarter is None else f"CY{year}Q{quarter-1}I"
+            lookup_val_prev = f"CY{year}Q{annual_quarter - 1}" if quarter is None else f"CY{year}Q{quarter - 1}"
 
         # Using DEI dataframe...
         try:
@@ -471,27 +477,36 @@ class SecApi:
             df_shares = pl.DataFrame(shares)
 
             try:
-                df_shares_i = df_shares.filter(pl.col("frame").cast(pl.Utf8).is_in([inst_lookup_val]))
+                df_shares_i = df_shares.filter(pl.col("frame").cast(pl.Utf8).is_in([inst_lookup_val, lookup_val]))
                 shares = df_shares_i.item(0, 'val')
 
+            # Try the previous lookup period if current lookup period not available
             except (IndexError, KeyError):
-                df_shares_i = df_shares.filter(pl.col("frame").cast(pl.Utf8).is_in([inst_lookup_val_prev]))
+                df_shares_i = df_shares.filter(pl.col("frame").cast(pl.Utf8).is_in([inst_lookup_val_prev, lookup_val_prev]))
                 shares = df_shares_i.item(0, 'val')
 
             return shares
 
         # ...else use the SEC data
-        except (IndexError, KeyError):
+        except (IndexError, KeyError, TypeError):
+
+            df_shares = self.facts_data.sec_data.filter(pl.col("key").cast(pl.Utf8).is_in(["CommonStockSharesOutstanding", 'WeightedAverageNumberOfSharesOutstandingBasic']))
+
             try:
-                df_shares = self.facts_data.sec_data.filter(pl.col("key").cast(pl.Utf8).is_in(["CommonStockSharesOutstanding", 'WeightedAverageNumberOfSharesOutstandingBasic']))
-                df_shares_i = df_shares.filter(pl.col("frame").cast(pl.Utf8).is_in([inst_lookup_val_prev]))
+                df_shares_i = df_shares.filter(pl.col("frame").cast(pl.Utf8).is_in([inst_lookup_val, lookup_val]))
                 shares = df_shares_i.item(0, 'val')
 
                 return shares
 
             except (IndexError, KeyError):
-                # print(f"*** SecApi: No outstanding share data found for {self.ticker}, returning None.")
-                return None
+                try:
+                    df_shares_i = df_shares.filter(pl.col("frame").cast(pl.Utf8).is_in([inst_lookup_val_prev, lookup_val_prev]))
+                    shares = df_shares_i.item(0, 'val')
+
+                    return shares
+
+                except (IndexError, KeyError):
+                    return None
 
     @weak_lru(maxsize=4)
     def align_fy_year(self, instant: bool) -> int:
