@@ -38,6 +38,34 @@ OWNERSHIP_MAP = {
     "I": "Indirect ownership"
 }
 
+
+def extract_roles(reporting_owner) -> dict:
+    """
+    Returns a dictionary of reporting owner types from an XML file
+    """
+    officer_title = gettext(reporting_owner, ".//officerTitle") or ""
+
+    is_officer = gettext(reporting_owner, ".//isOfficer") == "1"
+    is_director = gettext(reporting_owner, ".//isDirector") == "1"
+    is_10pct = gettext(reporting_owner, ".//isTenPercentOwner") == "1"
+    is_other = gettext(reporting_owner, ".//isOther") == "1"
+
+    is_csuite = is_officer and any(
+        k in officer_title.lower() for k in
+        ["ceo", "cfo", "coo", "cto", "cio", "cso", "cao", "chief"]
+    )
+
+    # Boolean flags
+    roles_flags = {
+        "CSuite": is_csuite,
+        "Officer": is_officer,
+        "Director": is_director,
+        "10PercentOwner": is_10pct,
+        "Other": is_other,
+    }
+
+    return roles_flags
+
 # ---
 def gettext(parent, path):
     el = parent.find(path)
@@ -69,11 +97,15 @@ def retrieve_form_4(xml_url: str, headers: dict) -> pl.DataFrame:
             "AcquisitionDisposal": gettext(tx,".//transactionAcquiredDisposedCode/value"),
             "SharesOwnedFollowingTransaction": gettext(tx,".//sharesOwnedFollowingTransaction/value"),
             "OwnershipType": gettext(tx, ".//directOrIndirectOwnership/value"),
-            "TransactionType": "Non-Derivative",
+            "TransactionType": "Non-Derivative Transaction",
         }
-        rows.append(fields)
 
-    df_nonderiv = pl.DataFrame(rows)
+        # --- Adding insider transactions
+        reporting_owner = root.find(".//reportingOwner")
+        role_flags = extract_roles(reporting_owner)
+        fields.update(role_flags)
+
+        rows.append(fields)
 
     # ---
 
@@ -90,8 +122,56 @@ def retrieve_form_4(xml_url: str, headers: dict) -> pl.DataFrame:
             "AcquisitionDisposal": gettext(tx,".//transactionAcquiredDisposedCode/value"),
             "SharesOwnedFollowingTransaction": gettext(tx,".//sharesOwnedFollowingTransaction/value"),
             "OwnershipType": gettext(tx, ".//directOrIndirectOwnership/value"),
-            "TransactionType": "Derivative",
+            "TransactionType": "Derivative Transaction",
         }
+
+        # --- Adding insider transactions
+        reporting_owner = root.find(".//reportingOwner")
+        role_flags = extract_roles(reporting_owner)
+        fields.update(role_flags)
+
+        rows.append(fields)
+
+    # ---
+
+    for h in root.findall(".//nonDerivativeHolding"):
+        fields = {
+            "Ticker": gettext(root, ".//issuerTradingSymbol"),
+            "Security": gettext(h, ".//securityTitle/value"),
+            "Date": None,
+            "Name": gettext(root, ".//reportingOwnerId/rptOwnerName"),
+            "Position": gettext(root, ".//officerTitle"),
+            "TransactionCode": None,
+            "Shares": None,
+            "TransactionPrice": None,
+            "AcquisitionDisposal": None,
+            "SharesOwnedFollowingTransaction": gettext(h, ".//sharesOwnedFollowingTransaction/value"),
+            "OwnershipType": gettext(h, ".//directOrIndirectOwnership/value"),
+            "NatureOfOwnership": gettext(h, ".//natureOfOwnership/value"),
+            "TransactionType": "Non-Derivative Holding",
+        }
+
+        rows.append(fields)
+
+    # ---
+
+    for h in root.findall(".//DerivativeHolding"):
+        fields = {
+            "Ticker": gettext(root, ".//issuerTradingSymbol"),
+            "Security": gettext(h, ".//securityTitle/value"),
+            "Date": None,
+            "Name": gettext(root, ".//reportingOwnerId/rptOwnerName"),
+            "Position": gettext(root, ".//officerTitle"),
+            "TransactionCode": None,
+            "Shares": None,
+            "TransactionPrice": None,
+            "AcquisitionDisposal": None,
+            "SharesOwnedFollowingTransaction": gettext(h, ".//sharesOwnedFollowingTransaction/value"),
+            "OwnershipType": gettext(h, ".//directOrIndirectOwnership/value"),
+            "NatureOfOwnership": gettext(h, ".//natureOfOwnership/value"),
+            "TransactionType": "Derivative Holding",
+        }
+
         rows.append(fields)
 
     df_concat = pl.DataFrame(rows)
@@ -104,5 +184,15 @@ def retrieve_form_4(xml_url: str, headers: dict) -> pl.DataFrame:
         pl.col("OwnershipType").replace(OWNERSHIP_MAP),
     ])
 
-    return df_concat
+    # ---
 
+    df_concat = df_concat.select(
+        "Ticker", "Security", "Date",
+        "Name", "Position",
+        "CSuite", "Officer", "Director", "10PercentOwner", "Other",
+        "TransactionCode", "Shares", "TransactionPrice",
+        "AcquisitionDisposal", "SharesOwnedFollowingTransaction",
+        "OwnershipType", "TransactionType",
+    )
+
+    return df_concat

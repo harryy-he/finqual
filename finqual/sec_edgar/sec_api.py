@@ -640,7 +640,7 @@ class SecApi:
     @weak_lru(maxsize=4)
     def get_form4(self, latest: int | None = None) -> pl.DataFrame:
         """
-        Returns the nth latest insider transaction form .
+        Returns the metadata dataframe of Form 4 filings
 
         Parameters
         ----------
@@ -687,4 +687,4 @@ class SecApi:
             return None
 
         else:
-            return df.slice(latest, latest+1)
+            return df
