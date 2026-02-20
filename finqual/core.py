@@ -1380,8 +1380,42 @@ class Finqual:
 
     def get_insider_transactions(self, n: int | None) -> pl.DataFrame:
 
-        url = self.sec_edgar.get_form4(n)["URL"][0]
+        df = self.sec_edgar.get_form4(n)
 
-        return retrieve_form_4(url, self.sec_edgar.headers)
+        if df is None:
+            raise ValueError(f"No Form 4 found for index {n}.")
+
+        else:
+            url = df["URL"][n]
+            filing_date = df["filingDate"][n]
+            report_date = df["reportDate"][n]
+            accession_number = df["accessionNumber"][n]
+
+            df_form4 = retrieve_form_4(url, self.sec_edgar.headers)
+
+            df_form4 = df_form4.with_columns([
+                pl.lit(filing_date).alias("filingDate"),
+                pl.lit(report_date).alias("reportDate"),
+                pl.lit(accession_number).alias("accessionNumber")
+            ])
+
+        return df_form4
+
+    def get_last_n_insider_transactions(self, n: int) -> pl.DataFrame:
+
+        dfs = []
+
+        for i in range(n):
+            try:
+                df = self.get_insider_transactions(i)
+            except ValueError:
+                continue  # skip missing filings
+
+            dfs.append(df)
+
+        combined = pl.concat(dfs)
+
+        return combined
+
 
 
