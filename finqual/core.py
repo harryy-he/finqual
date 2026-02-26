@@ -1413,7 +1413,7 @@ class Finqual:
 
             dfs.append(df)
 
-        combined = pl.concat(dfs)
+        combined = pl.concat(dfs, how="vertical_relaxed")
 
         return combined
 
