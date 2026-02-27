@@ -75,8 +75,7 @@ fq.CCA("NVDA").valuation_ratios() # Similar to before, but retrieve the valuatio
 We can also retrieve insider transactions:
 
 ```
-fq.Finqual("NVDA").get_insider_transactions(0) # Gets the latest insider transaction filing
-fq.Finqual("NVDA").get_insider_transactions(4) # Gets the 5th latest insider transaction filing
+fq.Finqual("NVDA").get_insider_transactions_period("3m") # Gets the latest insider transaction filings in past 3 months
 ```
 
 ## Dependencies
