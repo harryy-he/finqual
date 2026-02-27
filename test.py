@@ -10,8 +10,7 @@ for ticker in tickers:
     fq_ticker = fq.Finqual(ticker)
     fq_cca = fq.CCA(ticker)
 
-    df_insider = fq_ticker.get_insider_transactions(3).to_pandas()
-    df_insider_combined = fq_ticker.get_last_n_insider_transactions(3).to_pandas()
+    df_insider = fq_ticker.get_insider_transactions_period("3m").to_pandas()
 
     # Financial Statements
     df_inc = fq_ticker.income_stmt(year=start, quarter=quarter).to_pandas()  # Get annual income statements for end

@@ -12,6 +12,9 @@ import polars as pl
 import re
 import weakref
 
+from datetime import datetime, timedelta
+from dateutil.relativedelta import relativedelta
+
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 def weak_lru(maxsize: int = 128, typed: bool = False):
@@ -47,6 +50,24 @@ def weak_lru(maxsize: int = 128, typed: bool = False):
         return inner
 
     return wrapper
+
+def _parse_period_to_start_date(period: str) -> datetime:
+    """
+    Convert period string like '1y', '6m', '30d' into a start datetime.
+    """
+    now = datetime.utcnow()
+
+    unit = period[-1].lower()
+    value = int(period[:-1])
+
+    if unit == "y":
+        return now - relativedelta(years=value)
+    elif unit == "m":
+        return now - relativedelta(months=value)
+    elif unit == "d":
+        return now - timedelta(days=value)
+    else:
+        raise ValueError("Invalid period format. Use '1y', '6m', '30d', etc.")
 
 def build_rule(equation_str: str, prefer_balance: list[str] = None) -> dict:
     """
@@ -1378,44 +1399,61 @@ class Finqual:
         """
         return self._financials_period("valuation_ratios", start_year, end_year, 'ratios', quarter)
 
-    def get_insider_transactions(self, n: int | None) -> pl.DataFrame:
+    def _process_form4_by_accession(self, df_filings: pl.DataFrame, accession_number: str) -> pl.DataFrame:
+        """
+        Retrieve and normalize a single Form 4 filing by accession number.
+        """
 
-        df = self.sec_edgar.get_form4(n)
+        row = df_filings.filter(pl.col("accessionNumber") == accession_number)
 
-        if df is None:
-            raise ValueError(f"No Form 4 found for index {n}.")
+        if row.is_empty():
+            raise ValueError(f"Accession {accession_number} not found.")
 
-        else:
-            url = df["URL"][n]
-            filing_date = df["filingDate"][n]
-            report_date = df["reportDate"][n]
-            accession_number = df["accessionNumber"][n]
+        url = row["URL"][0]
+        filing_date = row["filingDate"][0]
+        report_date = row["reportDate"][0]
 
-            df_form4 = retrieve_form_4(url, self.sec_edgar.headers)
+        df_form4 = retrieve_form_4(url, self.sec_edgar.headers)
 
-            df_form4 = df_form4.with_columns([
-                pl.lit(filing_date).alias("filingDate"),
-                pl.lit(report_date).alias("reportDate"),
-                pl.lit(accession_number).alias("accessionNumber")
-            ])
+        df_form4 = df_form4.with_columns([
+            pl.lit(filing_date, dtype=pl.Utf8).alias("filingDate"),
+            pl.lit(report_date, dtype=pl.Utf8).alias("reportDate"),
+            pl.lit(accession_number, dtype=pl.Utf8).alias("accessionNumber"),
+        ])
 
         return df_form4
 
-    def get_last_n_insider_transactions(self, n: int) -> pl.DataFrame:
+    def get_insider_transactions_period(self, period: str) -> pl.DataFrame:
+        """
+        Retrieve insider transactions within a given period.
+        Example: '1y', '6m', '30d'
+        """
+
+        df = self.sec_edgar.get_form4()
+
+        if df is None or df.is_empty():
+            raise ValueError("No Form 4 filings found.")
+
+        start_date = _parse_period_to_start_date(period)
+
+        # Ensure filingDate is datetime
+        df = df.with_columns(pl.col("filingDate").str.strptime(pl.Date, strict=False))
+
+        # Filter filings within period
+        df_filtered = df.filter(pl.col("filingDate") >= start_date.date())
+
+        if df_filtered.is_empty():
+            return pl.DataFrame()
 
         dfs = []
 
-        for i in range(n):
+        for i in df_filtered["accessionNumber"]:
             try:
-                df = self.get_insider_transactions(i)
-            except ValueError:
-                continue  # skip missing filings
+                dfs.append(self._process_form4_by_accession(df_filtered, i))
+            except Exception:
+                continue
 
-            dfs.append(df)
+        if not dfs:
+            return pl.DataFrame()
 
-        combined = pl.concat(dfs, how="vertical_relaxed")
-
-        return combined
-
-
-
+        return pl.concat(dfs, how="vertical_relaxed")
