@@ -726,10 +726,6 @@ class SecApi:
                 + pl.lit(str(int(self.id_data.cik)))
                 + "/"
                 + pl.col("accessionNumber").str.replace_all("-", "")
-                + "/"
-                + pl.col("primaryDocument")
-                .str.split("/")
-                .list.last()
             ).alias("URL")
         )
 

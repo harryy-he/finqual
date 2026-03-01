@@ -1,6 +1,6 @@
 import finqual as fq
 
-tickers = ["BRK-B", 1018724, "NVDA", "ASML"]  # You can add more tickers if needed
+tickers = ["JPM", 1018724, "NVDA", "ASML"]  # You can add more tickers if needed
 start = 2020
 end = 2024
 quarter = 3  # For quarterly data
@@ -11,6 +11,9 @@ for ticker in tickers:
     fq_cca = fq.CCA(ticker)
 
     df_insider = fq_ticker.get_insider_transactions_period("3m").to_pandas()
+
+    df_form13 = fq_ticker.sec_edgar.get_form13().to_pandas()
+    df_form13_period = fq_ticker.get_form_13_period('12m').to_pandas()
 
     # Financial Statements
     df_inc = fq_ticker.income_stmt(year=start, quarter=quarter).to_pandas()  # Get annual income statements for end

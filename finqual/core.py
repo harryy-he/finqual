@@ -3,6 +3,7 @@ from .node_classes.node import Node
 from .sec_edgar.sec_api import SecApi
 from .stocktwit import StockTwit
 from .form_4 import retrieve_form_4
+from .form_13 import retrieve_form_13f_aggregated
 
 import functools
 from importlib.resources import files
@@ -1450,6 +1451,90 @@ class Finqual:
         for i in df_filtered["accessionNumber"]:
             try:
                 dfs.append(self._process_form4_by_accession(df_filtered, i))
+            except Exception:
+                continue
+
+        if not dfs:
+            return pl.DataFrame()
+
+        return pl.concat(dfs, how="vertical_relaxed")
+
+    def _process_form13_by_accession(self, df_filings: pl.DataFrame, accession_number: str) -> pl.DataFrame:
+        """
+        Retrieve and normalize a single Form 4 filing by accession number.
+        """
+
+        row = df_filings.filter(pl.col("accessionNumber") == accession_number)
+
+        if row.is_empty():
+            raise ValueError(f"Accession {accession_number} not found.")
+
+        url = row["URL"][0] + '/index.json'
+        filing_date = row["filingDate"][0]
+        report_date = row["reportDate"][0]
+
+        import requests
+
+        resp = requests.get(url, headers=self.sec_edgar.headers)
+        resp.raise_for_status()
+
+        files = resp.json()["directory"]["item"]
+
+        # -------------------------------
+        # Find holdings XML
+        # -------------------------------
+        xml_files = [
+            f["name"]
+            for f in files
+            if f["name"].lower().endswith(".xml")
+               and f["name"].lower() != "primary_doc.xml"
+        ]
+
+        if not xml_files:
+            raise ValueError(
+                f"No holdings XML found for accession {accession_number}"
+            )
+
+        # In this case it will be 50240.xml
+        info_xml_url = row["URL"][0] + f'/{xml_files[0]}'
+
+        df_form13 = retrieve_form_13f_aggregated(info_xml_url, self.sec_edgar.headers)
+
+        df_form13 = df_form13.with_columns([
+            pl.lit(filing_date, dtype=pl.Utf8).alias("filingDate"),
+            pl.lit(report_date, dtype=pl.Utf8).alias("reportDate"),
+            pl.lit(accession_number, dtype=pl.Utf8).alias("accessionNumber"),
+        ])
+
+        return df_form13
+
+    def get_form_13_period(self, period: str) -> pl.DataFrame:
+        """
+        Retrieve insider transactions within a given period.
+        Example: '1y', '6m', '30d'
+        """
+
+        df = self.sec_edgar.get_form13()
+
+        if df is None or df.is_empty():
+            raise ValueError("No Form 4 filings found.")
+
+        start_date = _parse_period_to_start_date(period)
+
+        # Ensure filingDate is datetime
+        df = df.with_columns(pl.col("filingDate").str.strptime(pl.Date, strict=False))
+
+        # Filter filings within period
+        df_filtered = df.filter(pl.col("filingDate") >= start_date.date())
+
+        if df_filtered.is_empty():
+            return pl.DataFrame()
+
+        dfs = []
+
+        for i in df_filtered["accessionNumber"]:
+            try:
+                dfs.append(self._process_form13_by_accession(df_filtered, i))
             except Exception:
                 continue
 
