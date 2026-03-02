@@ -383,4 +383,12 @@ class FinqualForms:
         if not dfs:
             return pl.DataFrame()
 
-        return pl.concat(dfs, how="vertical_relaxed")
+        df_agg = pl.concat(dfs, how="vertical_relaxed")
+
+        df_agg = df_agg.with_columns(
+            pl.lit(self.id_data.cik).alias("CIK")
+        )
+
+        df_agg = df_agg.select(["CIK"] + [c for c in df_agg.columns if c != "CIK"])
+
+        return df_agg
