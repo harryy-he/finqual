@@ -12,7 +12,7 @@ def gettext(el, path):
 def retrieve_form_13f_aggregated(xml_url: str, headers: dict) -> pl.DataFrame:
     """
     Retrieve and parse a 13F infoTable XML
-    and aggregate holdings by issuer (CUSIP-level).
+    and aggregate holdings by issuer + option type.
     """
 
     resp = requests.get(xml_url, headers=headers)
@@ -23,22 +23,31 @@ def retrieve_form_13f_aggregated(xml_url: str, headers: dict) -> pl.DataFrame:
     rows = []
 
     for holding in root.findall(".//ns:infoTable", SEC_13F_NS):
-        # Extract the numeric shares text
+
         shares_text = gettext(holding, "ns:shrsOrPrnAmt/ns:sshPrnamt")
         value_text = gettext(holding, "ns:value")
+        put_call = gettext(holding, "ns:putCall")
+
+        # Normalize asset type
+        if put_call:
+            asset_type = put_call.capitalize()  # Put / Call
+        else:
+            asset_type = "Equity"
 
         rows.append({
             "CUSIP": gettext(holding, "ns:cusip"),
             "Issuer": gettext(holding, "ns:nameOfIssuer"),
             "TitleOfClass": gettext(holding, "ns:titleOfClass"),
+            "AssetType": asset_type,
             "Shares": float(shares_text) if shares_text else 0.0,
             "Value_USD": float(value_text) * 1000 if value_text else 0.0,
         })
 
     df = pl.DataFrame(rows)
 
+    # 🚨 IMPORTANT: include AssetType in aggregation key
     df_agg = (
-        df.group_by(["CUSIP", "Issuer", "TitleOfClass"])
+        df.group_by(["CUSIP", "Issuer", "TitleOfClass", "AssetType"])
         .agg([
             pl.sum("Shares").alias("TotalShares"),
             pl.sum("Value_USD").alias("TotalValue_USD"),
@@ -46,7 +55,6 @@ def retrieve_form_13f_aggregated(xml_url: str, headers: dict) -> pl.DataFrame:
         .sort("TotalValue_USD", descending=True)
     )
 
-    # Optionally, portfolio weight:
     df_agg = df_agg.with_columns(
         (pl.col("TotalValue_USD") / pl.sum("TotalValue_USD")).alias("PortfolioWeight")
     )

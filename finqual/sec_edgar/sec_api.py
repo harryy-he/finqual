@@ -324,7 +324,7 @@ class SecApi:
         """
         url = "https://www.sec.gov/files/company_tickers_exchange.json"
         ticker_or_cik = str(ticker_or_cik)
-        
+
         with requests.get(url, headers=self.headers, stream=True) as r:
             gz = gzip.GzipFile(fileobj=r.raw)
             text_stream = io.TextIOWrapper(gz, encoding="utf‑8", errors="replace")
@@ -338,9 +338,9 @@ class SecApi:
                         "name": name,
                         "ticker": ticker,
                         "exchange": exchange
-                        } 
+                        }
                     return CompanyIdCode(**payload)
-                
+
             raise CompanyIdCodeNotFoundError(ticker_or_cik)
 
     # --- Company submissions
@@ -636,103 +636,3 @@ class SecApi:
         data = data.unique()
 
         return data
-
-    @weak_lru(maxsize=4)
-    def get_form4(self, latest: int | None = None) -> pl.DataFrame:
-        """
-        Returns the metadata dataframe of Form 4 filings
-
-        Parameters
-        ----------
-        latest : int
-            The "latest" latest insider transaction form, defaults to the latest.
-
-        Returns
-        -------
-        polars.DataFrame
-            Contains the relevant information for the transaction form.
-        """
-
-        if latest is None:
-            latest = 0
-
-        url = f"https://data.sec.gov/submissions/CIK{self.id_data.cik}.json"
-        response = requests.get(url, headers=self.headers)
-        response.raise_for_status()
-
-        json_request = response.json()
-
-        df = pl.DataFrame(json_request["filings"]["recent"])
-
-        # --- Filter relevant filings
-        df = df.filter(pl.col("form").is_in(["4"]))
-
-        # --- Build document URLs
-        df = df.with_columns(
-            (
-                pl.lit("https://www.sec.gov/Archives/edgar/data/")
-                + pl.lit(str(int(self.id_data.cik)))
-                + "/"
-                + pl.col("accessionNumber").str.replace_all("-", "")
-                + "/"
-                + pl.col("primaryDocument")
-                .str.split("/")
-                .list.last()
-            ).alias("URL")
-        )
-
-        # ---
-
-        if len(df) < latest:
-            return None
-
-        else:
-            return df
-
-    @weak_lru(maxsize=4)
-    def get_form13(self, latest: int | None = None) -> pl.DataFrame:
-        """
-        Returns the metadata dataframe of Form 4 filings
-
-        Parameters
-        ----------
-        latest : int
-            The "latest" latest insider transaction form, defaults to the latest.
-
-        Returns
-        -------
-        polars.DataFrame
-            Contains the relevant information for the transaction form.
-        """
-
-        if latest is None:
-            latest = 0
-
-        url = f"https://data.sec.gov/submissions/CIK{self.id_data.cik}.json"
-        response = requests.get(url, headers=self.headers)
-        response.raise_for_status()
-
-        json_request = response.json()
-
-        df = pl.DataFrame(json_request["filings"]["recent"])
-
-        # --- Filter relevant filings
-        df = df.filter(pl.col("form").is_in(["13-F", "13F-HR", "13F"]))
-
-        # --- Build document URLs
-        df = df.with_columns(
-            (
-                pl.lit("https://www.sec.gov/Archives/edgar/data/")
-                + pl.lit(str(int(self.id_data.cik)))
-                + "/"
-                + pl.col("accessionNumber").str.replace_all("-", "")
-            ).alias("URL")
-        )
-
-        # ---
-
-        if len(df) < latest:
-            return None
-
-        else:
-            return df

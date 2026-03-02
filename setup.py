@@ -2,12 +2,12 @@ from setuptools import setup, find_packages
 
 setup(
     name="finqual",  # This must be unique on PyPI
-    version="4.7.6",
+    version="4.8.0",
     author="Harry",
     description="A Python package to help investors to conduct financial research, analysis and comparable company analysis.",
     long_description=open("README.md", encoding="utf-8").read(),
     long_description_content_type="text/markdown",
-    url="https://github.com/harryy-he/finqual",  # optional, update if you have a repo
+    url="https://github.com/harryy-he/finqual",
     packages=find_packages(),  # Automatically includes finqual/
     include_package_data=True,
     package_data={'finqual': ['data/*.parquet', 'data/*.json', 'node_classes/*.py', 'sec_edgar/*.py', 'sec_edgar/entities/*.py']},
