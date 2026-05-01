@@ -185,5 +185,6 @@ class NodeTree:
 
         if len(rows) > 0:
             df = pl.DataFrame(rows)
-
             return df
+
+        return None

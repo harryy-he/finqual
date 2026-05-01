@@ -2,59 +2,26 @@ from .node_classes.node_tree import NodeTree
 from .node_classes.node import Node
 from .sec_edgar.sec_api import SecApi
 from .stocktwit import StockTwit
+from ._cache import weak_lru
+from . import ratios
 
-import functools
 from importlib.resources import files
 import ijson
 import numpy as np
 import polars as pl
 import re
-import weakref
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from dateutil.relativedelta import relativedelta
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-def weak_lru(maxsize: int = 128, typed: bool = False):
-    """
-    LRU cache decorator that stores a weak reference to 'self'.
-
-    This decorator is used to cache instance method results while avoiding
-    memory leaks by keeping only a weak reference to the object.
-
-    Parameters
-    ----------
-    maxsize : int, optional
-        Maximum size of the LRU cache (default is 128).
-    typed : bool, optional
-        If True, arguments of different types will be cached separately.
-
-    Returns
-    -------
-    callable
-        Decorator function to wrap methods with a weak LRU cache.
-    """
-    """LRU Cache decorator that keeps a weak reference to 'self'"""
-    def wrapper(func):
-
-        @functools.lru_cache(maxsize, typed)
-        def _func(_self, *args, **kwargs):
-            return func(_self(), *args, **kwargs)
-
-        @functools.wraps(func)
-        def inner(self, *args, **kwargs):
-            return _func(weakref.ref(self), *args, **kwargs)
-
-        return inner
-
-    return wrapper
 
 def _parse_period_to_start_date(period: str) -> datetime:
     """
     Convert period string like '1y', '6m', '30d' into a start datetime.
     """
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
 
     unit = period[-1].lower()
     value = int(period[:-1])
@@ -112,8 +79,7 @@ def build_rule(equation_str: str, prefer_balance: list[str] = None) -> dict:
         # Prepare dict of known vars
         known_vars = {k: v for k, v in kwargs.items() if v is not None}
 
-        # Parse rhs into tokens (var names with signs)
-        import re
+        # Parse rhs into tokens (var names with signs); ``re`` already imported at module level.
         tokens = re.findall(r"([+-]?)\s*([A-Za-z ]+)", rhs)
 
         # Build dictionary of var -> sign (+1 or -1)
@@ -341,6 +307,12 @@ class Finqual:
         df_label = pl.scan_parquet(path)
         return df_label
 
+    # Mapping of taxonomy → packaged tree JSON. Falls back to GAAP for unknown taxonomies.
+    _TREE_FILES = {
+        "us-gaap": "gaap_trees.json",
+        "ifrs-full": "ifrs_trees.json",
+    }
+
     def select_tree(self) -> dict[str, list[Node]]:
         """
         Select and load the appropriate taxonomy tree based on the company's taxonomy.
@@ -350,14 +322,8 @@ class Finqual:
         dict[str, list[Node]]
             Dictionary of Node trees keyed by ticker.
         """
-        if self.taxonomy == "us-gaap":
-            return self.load_trees("gaap_trees.json")
-
-        elif self.taxonomy == "ifrs-full":
-            return self.load_trees("ifrs_trees.json")
-
-        else:
-            return self.load_trees("gaap_trees.json")
+        file_name = self._TREE_FILES.get(self.taxonomy, "gaap_trees.json")
+        return self.load_trees(file_name)
 
     def select_label(self) -> pl.LazyFrame | pl.DataFrame:
         """
@@ -998,60 +964,74 @@ class Finqual:
         """
         return self._financials_period('cash_flow', start_year, end_year, 'statement', quarter)
 
+    # ------------------------------------------------------------------ #
+    # Trailing Twelve Months (TTM)
+    # ------------------------------------------------------------------ #
+
+    def _ttm_from_quarterly(
+        self,
+        period_fetcher,
+        statement_name: str,
+        end_cash_index: int | None = None,
+    ) -> pl.DataFrame:
+        """
+        Generic TTM helper for income statement and cash flow.
+
+        ``period_fetcher`` is one of :meth:`income_stmt_period` or
+        :meth:`cash_flow_period`. If insufficient quarterly columns are
+        available, fall back to the most recent annual column.
+
+        Parameters
+        ----------
+        period_fetcher : callable
+            Bound method returning a quarterly statement DataFrame.
+        statement_name : str
+            Human-readable name used in the warning message.
+        end_cash_index : int or None, default ``None``
+            Row index of an instantaneous "End Cash Position" line that must
+            not be summed (cash flow only).
+        """
+        current_year, _ = self.sec_edgar.latest_report(quarterly=True)
+        df = period_fetcher(current_year - 1, current_year, True)
+
+        line_items = df.select(pl.col(df.columns[0]))
+        threshold = 4 if end_cash_index is None else 5  # cash_flow_ttm uses <= 4
+
+        if (end_cash_index is None and df.width < threshold) or (end_cash_index is not None and df.width <= 4):
+            print(f"Not enough data to calculate {statement_name} TTM for {self.ticker}")
+            df = period_fetcher(current_year - 2, current_year + 2)
+            line_items = df.select(pl.col(df.columns[0]))
+            return pl.DataFrame(
+                {self.ticker: line_items, "TTM": df.select(pl.col(df.columns[1]))}
+            )
+
+        df_quarters = df.select(pl.col(df.columns[1:5]))
+        ttm = sum(df_quarters)
+
+        result = pl.DataFrame({self.ticker: line_items, "TTM": ttm})
+
+        # Cash flow's end-cash line is instantaneous, not cumulative.
+        if end_cash_index is not None:
+            result[end_cash_index, 1] = df_quarters[end_cash_index, 0]
+
+        return result
+
     @weak_lru(maxsize=4)
     def income_stmt_ttm(self) -> pl.DataFrame:
         """
-        Retrieve trailing twelve months (TTM) income statement.
+        Retrieve the trailing twelve months (TTM) income statement.
 
-        Returns
-        -------
-        pl.DataFrame
-            Polars DataFrame containing TTM income statement values.
-        Notes
-        -----
-        If insufficient quarterly data exists, falls back to annual data for TTM calculation.
+        If insufficient quarterly data exists, falls back to annual data.
         """
-        current_year, current_quarter = self.sec_edgar.latest_report(quarterly=True)
-
-        df_inc = self.income_stmt_period(current_year - 1, current_year, True)
-
-        line_items = df_inc.select(pl.col(df_inc.columns[0]))
-
-        if df_inc.width < 4:
-            print(f"Not enough data to calculate income TTM for {self.ticker}")
-
-            df_inc = self.income_stmt_period(current_year - 2, current_year + 2)
-            line_items = df_inc.select(pl.col(df_inc.columns[0]))
-
-            df_ttm = pl.DataFrame({
-                self.ticker: line_items,
-                "TTM": df_inc.select(pl.col(df_inc.columns[1])),
-            })
-
-            return df_ttm
-
-        df_ttm = df_inc.select(pl.col(df_inc.columns[1:5]))
-        ttm = sum(df_ttm)
-
-        df_ttm = pl.DataFrame({
-            self.ticker: line_items,
-            "TTM": ttm,
-        })
-
-        return df_ttm
+        return self._ttm_from_quarterly(self.income_stmt_period, "income")
 
     @weak_lru(maxsize=4)
     def balance_sheet_ttm(self) -> pl.DataFrame:
         """
-        Retrieve trailing twelve months (TTM) balance sheet.
+        Retrieve the trailing twelve months (TTM) balance sheet.
 
-        Returns
-        -------
-        pl.DataFrame
-            Polars DataFrame containing TTM balance sheet values.
-        Notes
-        -----
-        If no balance sheet data exists, returns NaN for TTM values.
+        Balance sheet is a snapshot, so "TTM" here just returns the most
+        recent quarter. If no balance-sheet data exists, returns NaN values.
         """
         current_year, current_quarter = self.sec_edgar.latest_report(quarterly=True)
         df_bs = self.balance_sheet(current_year, current_quarter)
@@ -1060,70 +1040,21 @@ class Finqual:
 
         if df_bs.width < 1:
             print(f"No balance sheet data for {self.ticker}")
-
-            df_ttm = pl.DataFrame({
-                self.ticker: line_items,
-                "TTM": np.nan,
-            })
-
-            return df_ttm
+            return pl.DataFrame({self.ticker: line_items, "TTM": np.nan})
 
         df_ttm = df_bs.select(pl.col(df_bs.columns[1:2]))
         ttm = sum(df_ttm)
-
-        df_ttm = pl.DataFrame({
-            self.ticker: line_items,
-            "TTM": ttm,
-        })
-
-        return df_ttm
+        return pl.DataFrame({self.ticker: line_items, "TTM": ttm})
 
     @weak_lru(maxsize=4)
     def cash_flow_ttm(self) -> pl.DataFrame:
         """
-        Retrieve trailing twelve months (TTM) cash flow statement.
+        Retrieve the trailing twelve months (TTM) cash flow statement.
 
-        Returns
-        -------
-        pl.DataFrame
-            Polars DataFrame containing TTM cash flow statement values.
-        Notes
-        -----
-        Adjusts end cash position to match instantaneous nature of cash in cash flow statement.
+        The "End Cash Position" line (row index 4) is instantaneous and is
+        carried forward from the latest quarter rather than summed.
         """
-        current_year, current_quarter = self.sec_edgar.latest_report(quarterly=True)
-        df_cf = self.cash_flow_period(current_year - 1, current_year, True)
-
-        line_items = df_cf.select(pl.col(df_cf.columns[0]))
-
-        if df_cf.width <= 4:
-            print(f"Not enough data to calculate cashflow TTM for {self.ticker}")
-
-            df_cf = self.cash_flow_period(current_year - 2, current_year + 2)
-            line_items = df_cf.select(pl.col(df_cf.columns[0]))
-
-            df_ttm = pl.DataFrame({
-                self.ticker: line_items,
-                "TTM": df_cf.select(pl.col(df_cf.columns[1])),
-            })
-
-            return df_ttm
-
-        df_ttm = df_cf.select(pl.col(df_cf.columns[1:5]))
-        ttm = sum(df_ttm)
-
-        end_cash = df_ttm[4, 0]
-
-        df_ttm = pl.DataFrame({
-            self.ticker: line_items,
-            "TTM": ttm,
-        })
-
-        # --- Adjust specific line items
-
-        df_ttm[4, 1] = end_cash
-
-        return df_ttm
+        return self._ttm_from_quarterly(self.cash_flow_period, "cashflow", end_cash_index=4)
 
     # ----
 
@@ -1179,7 +1110,8 @@ class Finqual:
             for ratio, func in ratio_definitions.items():
                 try:
                     result[ratio] = func(statement_data) * ratio_multiplier
-                except (ZeroDivisionError, TypeError):
+                except (ZeroDivisionError, TypeError, KeyError):
+                    # Missing line items / zero denominators degrade gracefully to NaN.
                     result[ratio] = np.nan
             return result
 
@@ -1222,18 +1154,18 @@ class Finqual:
             }
 
         ratio_definitions = {
-            'SG&A Ratio': lambda data: data['income'].get('Selling General And Administration') / data['income'].get('Total Revenue'),
-            'R&D Ratio': lambda data: data['income'].get('Research And Development') / data['income'].get('Total Revenue'),
-            'Operating Margin': lambda data: data['income'].get('Operating Income') / data['income'].get('Total Revenue'),
-            'Gross Margin': lambda data: data['income'].get('Gross Profit') / data['income'].get('Total Revenue'),
-            'ROA': lambda data: data['income'].get('Net Income') / data['balance'].get('Total Assets'),
-            'ROE': lambda data: data['income'].get('Net Income') / data['balance'].get('Stockholders Equity'),
-            'ROIC': lambda data: data['income'].get('Operating Income') * (1 - (data['income'].get('Tax Provision', 0) / data['income'].get('Pretax Income'))) / (data['balance'].get('Total Assets') - data['balance'].get('Other Short Term Investments') - data['balance'].get('Accounts Payable') - data['balance'].get('Other Current Liabilities')),
+            'SG&A Ratio':       lambda data: ratios.sga_ratio(data['income']),
+            'R&D Ratio':        lambda data: ratios.rd_ratio(data['income']),
+            'Operating Margin': lambda data: ratios.operating_margin(data['income']),
+            'Gross Margin':     lambda data: ratios.gross_margin(data['income']),
+            'ROA':              lambda data: ratios.roa(data['income'], data['balance']),
+            'ROE':              lambda data: ratios.roe(data['income'], data['balance']),
+            'ROIC':             lambda data: ratios.roic(data['income'], data['balance']),
         }
 
-        ratios = self._get_ratios(year, ratio_definitions, statement_fetchers, quarter, True)
+        ratio_row = self._get_ratios(year, ratio_definitions, statement_fetchers, quarter, True)
 
-        df_ratio = pl.DataFrame([ratios])
+        df_ratio = pl.DataFrame([ratio_row])
         df_ratio = df_ratio.fill_null(np.nan)
 
         return df_ratio
@@ -1267,14 +1199,14 @@ class Finqual:
             }
 
         ratio_definitions = {
-            'Current Ratio': lambda data: data['balance'].get('Current Assets') / data['balance'].get('Current Liabilities'),
-            'Quick Ratio': lambda data: (data['balance'].get('Current Assets') - data['balance'].get('Inventory')) / data['balance'].get('Current Liabilities'),
-            'Debt-to-Equity Ratio': lambda data: data['balance'].get('Total Liabilities Net Minority Interest') / data['balance'].get('Stockholders Equity'),
+            'Current Ratio':        lambda data: ratios.current_ratio(data['balance']),
+            'Quick Ratio':          lambda data: ratios.quick_ratio(data['balance']),
+            'Debt-to-Equity Ratio': lambda data: ratios.debt_to_equity(data['balance']),
         }
 
-        ratios = self._get_ratios(year, ratio_definitions, statement_fetchers, quarter, False)
+        ratio_row = self._get_ratios(year, ratio_definitions, statement_fetchers, quarter, False)
 
-        df_ratio = pl.DataFrame([ratios])
+        df_ratio = pl.DataFrame([ratio_row])
         df_ratio = df_ratio.fill_null(np.nan)
 
         return df_ratio
@@ -1322,15 +1254,15 @@ class Finqual:
             }
 
         ratio_definitions = {
-            'EPS': lambda data: data['income'].get('Net Income') / data['balance'].get('Shares Outstanding'),
-            'P/E': lambda data: share_price / (data['income'].get('Net Income') / data['balance'].get('Shares Outstanding')),
-            'P/B': lambda data: (share_price * data['balance'].get('Shares Outstanding')) / (data['balance'].get('Total Assets') - data['balance'].get('Total Liabilities Net Minority Interest')),
-            'EV/EBITDA': lambda data: (data['balance'].get('Shares Outstanding') * share_price + data['cashflow'].get('End Cash Position')) / (data['income'].get('Operating Income') + data['cashflow'].get('Depreciation And Amortization')),
+            'EPS':       lambda data: ratios.eps(data['income'], data['balance']),
+            'P/E':       lambda data: ratios.pe(data['income'], data['balance'], share_price),
+            'P/B':       lambda data: ratios.pb(data['income'], data['balance'], share_price),
+            'EV/EBITDA': lambda data: ratios.ev_ebitda(data['income'], data['balance'], data['cashflow'], share_price),
         }
 
-        ratios = self._get_ratios(year, ratio_definitions, statement_fetchers, quarter, False)
+        ratio_row = self._get_ratios(year, ratio_definitions, statement_fetchers, quarter, False)
 
-        df_ratio = pl.DataFrame([ratios])
+        df_ratio = pl.DataFrame([ratio_row])
         df_ratio = df_ratio.fill_null(np.nan)
 
         return df_ratio

@@ -81,6 +81,7 @@ snapshot_files = glob.glob(os.path.join(SNAPSHOT_DIR, "*.json"))
 print("Found snapshot files:", snapshot_files)
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize("snapshot_path", snapshot_files)
 def test_finqual_snapshot(snapshot_path: str) -> None:
     """

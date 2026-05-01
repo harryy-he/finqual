@@ -1,3 +1,65 @@
 [build-system]
 requires = ["setuptools>=42", "wheel"]
 build-backend = "setuptools.build_meta"
+
+[project]
+name = "finqual"
+version = "5.0.0"
+description = "A Python package to help investors conduct financial research, analysis, and comparable company analysis."
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "Harry" }]
+license = { text = "MIT" }
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "pandas>=2.2.3",
+    "polars>=1.35.1",
+    "cloudscraper>=1.2.71",
+    "requests>=2.32.4",
+    "ratelimit>=2.2.1",
+    "matplotlib>=3.8.0",
+    "pyarrow>=12.0.0",
+    "ijson>=3.4.0",
+    "numpy>=2.2.6",
+    "pydantic>=2.12.4",
+    "python-dateutil>=2.8.2",
+]
+
+[project.urls]
+Homepage = "https://github.com/harryy-he/finqual"
+
+[project.optional-dependencies]
+dev = ["pytest>=7.4", "pytest-cov>=4.1"]
+
+[tool.setuptools.packages.find]
+include = ["finqual*"]
+
+[tool.setuptools.package-data]
+finqual = [
+    "data/*.parquet",
+    "data/*.json",
+    "node_classes/*.py",
+    "sec_edgar/*.py",
+    "sec_edgar/entities/*.py",
+    "config/*.py",
+    "visualization/*.py",
+]
+
+[tool.pytest.ini_options]
+# Confine test discovery to ``tests/`` so root-level smoke scripts
+# (``examples/smoke_*.py``) are NOT collected as tests.
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+markers = [
+    "integration: tests requiring live SEC EDGAR network access (deselect with '-m \"not integration\"')",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"

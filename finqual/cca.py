@@ -1,25 +1,8 @@
 from .core import Finqual
+from ._cache import weak_lru
 import polars as pl
 from concurrent.futures import ThreadPoolExecutor, as_completed
-import functools
-import weakref
 import gc
-
-def weak_lru(maxsize=128, typed=False):
-    """LRU Cache decorator that keeps a weak reference to 'self'"""
-    def wrapper(func):
-
-        @functools.lru_cache(maxsize, typed)
-        def _func(_self, *args, **kwargs):
-            return func(_self(), *args, **kwargs)
-
-        @functools.wraps(func)
-        def inner(self, *args, **kwargs):
-            return _func(weakref.ref(self), *args, **kwargs)
-
-        return inner
-
-    return wrapper
 
 
 class CCA:
@@ -129,7 +112,9 @@ class CCA:
                 gc.collect()
                 return df_ratio
 
-            except:
+            except Exception as e:
+                # Ratios for one peer should never break the whole batch.
+                print(f"[CCA] Skipping {ticker} ({method_name}): {type(e).__name__}: {e}")
                 return None
 
         tickers = self.get_c(n)
@@ -197,7 +182,8 @@ class CCA:
                 del fq_instance
                 gc.collect()
                 return df_ratio
-            except:
+            except Exception as e:
+                print(f"[CCA] Skipping {ticker} ({method_name}): {type(e).__name__}: {e}")
                 return None
 
         tickers = self.get_c(n)

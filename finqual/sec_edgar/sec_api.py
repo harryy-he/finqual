@@ -1,48 +1,15 @@
 import requests
 import polars as pl
-import functools
-import weakref
 from ratelimit import limits
 import gzip
 import ijson
 import io
 
+from finqual._cache import weak_lru
 from finqual.config.headers import sec_headers
 from finqual.sec_edgar.entities.exceptions import CompanyIdCodeNotFoundError
 from finqual.sec_edgar.entities.models import CompanyFacts, CompanySubmission, CompanyIdCode
 
-def weak_lru(maxsize: int = 128, typed: bool = False):
-    """
-    LRU cache decorator that stores a **weak reference to `self`**.
-
-    This pattern allows caching of instance methods while preventing memory leaks
-    by avoiding strong references to the class instance.
-
-    Parameters
-    ----------
-    maxsize : int, default 128
-        Maximum size of the LRU cache.
-    typed : bool, default False
-        Whether to consider function argument types as part of the cache key.
-
-    Returns
-    -------
-    callable
-        Decorated method with LRU caching applied.
-    """
-    def wrapper(func):
-
-        @functools.lru_cache(maxsize, typed)
-        def _func(_self, *args, **kwargs):
-            return func(_self(), *args, **kwargs)
-
-        @functools.wraps(func)
-        def inner(self, *args, **kwargs):
-            return _func(weakref.ref(self), *args, **kwargs)
-
-        return inner
-
-    return wrapper
 
 def map_missing_frames(df: pl.DataFrame) -> pl.DataFrame:
     """
