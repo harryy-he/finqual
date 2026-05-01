@@ -21,6 +21,9 @@ def _base_row(**overrides):
         "frame": None,
         "form": "10-K",
         "fp": "FY",
+        "filing_date": "2025-02-15",
+        "accession_number": "0000320193-25-000001",
+        "is_amendment": False,
     }
     base.update(overrides)
     return base
