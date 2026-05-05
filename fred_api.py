@@ -223,29 +223,99 @@ class FredClient:
 
         return df_event
 
+    def get_bulk_daily_series(self, series_ids: str | list[str],
+                              start_date: str,
+                              labels: dict | None = None) -> pd.DataFrame:
+
+        if isinstance(series_ids, str):
+            series_ids = [series_ids]
+
+        start_dt = pd.to_datetime(start_date).normalize()
+        end_date = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+
+        # 1. Create the master timeline grid
+        master_df = pd.DataFrame({'date': pd.date_range(start=start_dt, end=end_date, freq='D')})
+        master_df['date'] = master_df['date'].dt.normalize()
+
+        for s_id in series_ids:
+            # 2. Fetch full history
+            df = self.get_series(s_id, observation_start="1776-07-04", return_full_history=True)
+
+            # Standardize and sort for merge_asof (required)
+            df['date'] = pd.to_datetime(df['date']).dt.normalize()
+            df['realtime_start'] = pd.to_datetime(df['realtime_start']).dt.normalize()
+            df['value'] = pd.to_numeric(df['value'], errors='coerce')
+
+            # We only care about the latest 'realtime_start' for each observation 'date'
+            # to ensure we don't have duplicates before the asof merge
+            df = df.sort_values(['realtime_start', 'date'], ascending=[True, False])
+
+            # 3. Vectorized Point-in-Time Join
+            # This matches each day in master_df to the most recent 'realtime_start' in df
+            temp_daily = pd.merge_asof(
+                master_df,
+                df[['realtime_start', 'value', 'date']],
+                left_on='date',
+                right_on='realtime_start',
+                direction='backward'
+            )
+
+            # 4. Cleanup and Labeling
+            label = labels.get(s_id, s_id) if labels else s_id
+            temp_daily = temp_daily.rename(columns={
+                'value': f'value_{label}',
+                'date_y': f'ref_{label}'
+            })
+
+            # Keep only necessary columns for the next merge
+            master_df = master_df.merge(
+                temp_daily[['date_x', f'value_{label}', f'ref_{label}']],
+                left_on='date',
+                right_on='date_x'
+            ).drop(columns=['date_x'])
+
+        # 5. Final Formatting
+        master_df['date'] = master_df['date'].dt.strftime('%Y-%m-%d')
+        for col in [c for c in master_df.columns if c.startswith('ref_')]:
+            master_df[col] = pd.to_datetime(master_df[col]).dt.strftime('%Y-%m-%d')
+
+        return master_df
+
 if __name__ == "__main__":
     api_key = "79bd13604bbe0db51d65ce6dfdca87fb"
     client = FredClient(api_key)
 
     # -------
 
-    STLENI_data_daily = client.get_daily_series(
-        series_id="STLENI",
-        start_date="2025-01-01",
-    )
-
-    GDPNOW_data_daily = client.get_daily_series(
-        series_id="GDPNOW",
+    df_GDP = client.get_daily_series(
+        series_id="A191RL1Q225SBEA",
         start_date="2025-01-01",
     )
 
     # -------
 
-    ml_data_release = client.get_release_events(
+    df_gdp_surprise = client.get_release_events(
         series_id="A191RL1Q225SBEA",
         forecast_ids=['STLENI', 'GDPNOW'],
         start_date="2025-01-01",
-        label="real_gdp_growth"
+        label="GDP"
+    )
+
+    # -------
+
+    df_enriched = df_GDP.merge(
+        df_gdp_surprise[['release_date', 'surprise_STLENI']],
+        left_on='date',
+        right_on='release_date',
+        how='left'
+    )
+
+    # -------
+
+    ml_bulk_data_release = client.get_bulk_daily_series(
+        series_ids=["A191RL1Q225SBEA", "STLENI"],
+        start_date="2025-01-01",
+        labels={"A191RL1Q225SBEA": "GDP"}
     )
 
     # -------
