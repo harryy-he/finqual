@@ -1,5 +1,5 @@
 import requests
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import pandas as pd
 
 
@@ -75,7 +75,95 @@ class FredClient:
 
         return df
 
-    def get_ml_series(self, series_id, start_date, end_date, frequency="monthly", method="point-in-time"):
+    def get_daily_series(self, series_id: str, start_date: str) -> pd.DataFrame:
+        """
+        Returns a daily-indexed time series for a given series FRED ID.
+        It gives the point-in-time data.
+        """
+        df = self.get_series(series_id, observation_start="1776-07-04",
+                             return_full_history=True)
+
+        # Standardize types and normalize dates
+        df['date'] = pd.to_datetime(df['date']).dt.normalize()
+        df['realtime_start'] = pd.to_datetime(df['realtime_start']).dt.normalize()
+        df['realtime_end'] = pd.to_datetime(df['realtime_end']).dt.normalize()
+        df['value'] = pd.to_numeric(df['value'], errors='coerce')
+
+        # 2. Define the timeline (Start to UTC Today)
+        end_date = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+        timeline = pd.date_range(start=start_date, end=end_date, freq='D')
+
+        daily_results = []
+
+        # 3. Efficient Point-in-Time Scan
+        # We iterate through the timeline to find the state of the world on that day
+        for as_of in timeline:
+            # What observations were "live" on this specific calendar date?
+            mask = (df['realtime_start'] <= as_of) & (df['realtime_end'] >= as_of)
+            valid_snapshot = df[mask]
+
+            if not valid_snapshot.empty:
+                # Of all valid observations, pick the one with the most recent observation_date
+                # This handles the forward-filling naturally (e.g., seeing Dec data in Jan)
+                latest_obs = valid_snapshot.sort_values('date', ascending=False).iloc[0]
+
+                daily_results.append({
+                    'date': as_of,
+                    'value': latest_obs['value'],
+                    'reference_period': latest_obs['date']
+                })
+
+            else:
+                # Handle cases where no data was yet released for the start of the timeline
+                daily_results.append({
+                    'date': as_of,
+                    'value': None,
+                    'reference_period': None
+                })
+
+        result_df = pd.DataFrame(daily_results)
+
+        # 4. Final Formatting
+        result_df['date'] = result_df['date'].dt.strftime('%Y-%m-%d')
+        result_df['reference_period'] = pd.to_datetime(result_df['reference_period']).dt.strftime('%Y-%m-%d')
+
+        return result_df[['date', 'value', 'reference_period']]
+
+    def get_release_events(self, series_id: str, start_date: str,
+                           first_release_only=True) -> pd.DataFrame:
+
+        # 1. Fetch FULL history - no start_date filter on the API call
+        df = self.get_series(series_id, return_full_history=True)
+
+        # 2. Standardize
+        df['date'] = pd.to_datetime(df['date']).dt.normalize()
+        df['realtime_start'] = pd.to_datetime(df['realtime_start']).dt.normalize()
+        df['value'] = pd.to_numeric(df['value'], errors='coerce')
+
+        # 3. Compute revision numbers across full history first
+        df = df.sort_values(['date', 'realtime_start'])
+        df['revision_number'] = df.groupby('date').cumcount() + 1
+
+        # 4. NOW filter to only rows where the release itself happened after start_date
+        start_dt = pd.to_datetime(start_date).normalize()
+        event_df = df[df['realtime_start'] >= start_dt].copy()
+
+        # 5. Rename and format
+        event_df = event_df.rename(columns={
+            'realtime_start': 'release_date',
+            'date': 'reference_period',
+        })
+
+        event_df['release_date'] = event_df['release_date'].dt.strftime('%Y-%m-%d')
+        event_df['reference_period'] = event_df['reference_period'].dt.strftime('%Y-%m-%d')
+
+        if first_release_only:
+            event_df = event_df[event_df["revision_number"] == 1]
+
+        return event_df[['release_date', 'reference_period', 'value',
+                         'revision_number']].sort_values('release_date')
+
+    def get_ml_series(self, series_id, start_date, end_date, frequency="daily", method="point-in-time"):
         # 1. Fetch history
         df = self.get_series(series_id, observation_start="1776-07-04", return_full_history=True)
 
@@ -138,18 +226,19 @@ class FredClient:
 
             # Append results in a consistent format
             if match is not None:
+
                 ml_results.append({
                     'date': as_of,
                     'value': match['value'],
                     'observation_date': match['date'],
-                    'revision_number': match['revision_number']
+                    'revision_number': match['revision_number'],
                 })
             else:
                 ml_results.append({
                     'date': as_of,
                     'value': None,
                     'observation_date': None,
-                    'revision_number': None
+                    'revision_number': None,
                 })
 
         result_df = pd.DataFrame(ml_results)
@@ -160,72 +249,140 @@ class FredClient:
 
         return result_df[['date', 'value', 'observation_date', 'revision_number']]
 
-    def get_gdp_surprise_series(self, start_date, end_date):
-        # 1. Fetch the data (daily frequencies)
-        # actual_df: The official BEA value known to the market on each calendar date
-        actual_df = self.get_ml_series("A191RL1Q225SBEA", start_date, end_date, frequency="daily", method="first")
-        # nowcast_df: The STLENI forecast known to the market on each calendar date
-        nowcast_df = self.get_ml_series("STLENI", start_date, end_date, frequency="daily", method="point-in-time")
+    def get_macro_surprise_panel(self, start_date, end_date, actual_ticker,
+                                 forecast_config):
+        """
+        Args:
+            start_date (str): 'YYYY-MM-DD'
+            end_date (str): 'YYYY-MM-DD'
+            actual_ticker (str): The FRED ticker for the actual data (e.g., "A191RL1Q225SBEA")
+            forecast_config (dict): { "MODEL_NAME": "TICKER" }
+                                     e.g., {"STLENI": "STLENI", "GDPNOW": "GDPNOW"}
+        """
+        start_dt = pd.to_datetime(start_date)
+        buffered_start = (start_dt - timedelta(days=60)).strftime('%Y-%m-%d')
 
-        # 2. Merge them!
-        # CRITICAL: We join on 'date' (calendar time) to see what was known,
-        # BUT we must ensure we compare values referring to the SAME quarter.
-        df = pd.merge(actual_df, nowcast_df, on='date', suffixes=('_act', '_now'))
+        # 1. Fetch the Actual series (buffered)
+        actual_df = self.get_ml_series(actual_ticker, buffered_start, end_date,
+                                       frequency="daily", method="first")
+        actual_df = actual_df.rename(
+            columns={'observation_date': 'ref_date_act',
+                     'value': 'actual_val'})
 
-        # 3. Identify the "Surprise Trigger"
-        # A surprise happens when the market gets a new official observation_date
-        # for the actual GDP series.
-        df['is_release_day'] = df['observation_date_act'] != df['observation_date_act'].shift(1)
+        panel_results = []
 
-        # 4. Calculate the Surprise with Alignment Check
-        # We only care about the Nowcast value that matches the Actual's observation date.
-        def calculate_aligned_surprise(row):
-            if row['is_release_day']:
-                # Does the Nowcast we had today refer to the quarter just released?
-                # On release day, STLENI for that quarter is 'finalized'.
-                if row['observation_date_act'] == row['observation_date_now']:
-                    return row['value_act'] - row['value_now']
-                else:
-                    # If they don't align, we need to find the Nowcast value
-                    # that DID refer to observation_date_act.
-                    return 0.0  # Or implement a secondary lookup logic
-            return 0.0
+        # 2. Iterate through N forecast series
+        for model_name, ticker in forecast_config.items():
+            forecast_df = self.get_ml_series(ticker, buffered_start, end_date,
+                                             frequency="daily",
+                                             method="point-in-time")
 
-        df['gdp_surprise'] = df.apply(calculate_aligned_surprise, axis=1)
+            forecast_df = forecast_df.rename(
+                columns={'observation_date': 'ref_date_fcst',
+                         'value': 'fcst_val'})
 
-        return df
+            # Merge Actual and current Forecast
+            df = pd.merge(actual_df, forecast_df, on='date')
+            df['date_dt'] = pd.to_datetime(df['date'])
+
+            # Calculate Indicators
+            df['is_release'] = df['ref_date_act'] != df['ref_date_act'].shift(1)
+            df['prior_fcst'] = df['fcst_val'].shift(1)
+            df['prior_ref_fcst'] = df['ref_date_fcst'].shift(1)
+
+            for _, row in df.iterrows():
+                if row['date_dt'] < start_dt:
+                    continue
+
+                # Default values for Forecast rows
+                res_ref_date = row['ref_date_fcst']
+                res_type = 'forecast'
+                res_value = row['fcst_val']
+                res_surprise = None
+
+                # Pivot logic for Release Day
+                if row['is_release']:
+                    res_type = 'actual'
+                    res_value = row['actual_val']
+                    res_ref_date = row['ref_date_act']
+
+                    if row['ref_date_act'] == row['prior_ref_fcst']:
+                        res_surprise = row['actual_val'] - row['prior_fcst']
+                    else:
+                        res_surprise = 0.0
+
+                # Calculate days_since_reference dynamically based on the active ref_date
+                # This ensures that on release day, it measures against the ACTUAL quarter start
+                days_since = (
+                            row['date_dt'] - pd.to_datetime(res_ref_date)).days
+
+                panel_results.append({
+                    'date': row['date'],
+                    'reference_date': res_ref_date,
+                    'source': model_name,
+                    'type': res_type,
+                    'value': res_value,
+                    'surprise': res_surprise,
+                    'days_since_reference': days_since
+                })
+
+        # 3. Final DataFrame formatting
+        df_final = pd.DataFrame(panel_results)
+        df_final['date'] = pd.to_datetime(df_final['date']).dt.strftime(
+            '%Y-%m-%d')
+        df_final['reference_date'] = pd.to_datetime(
+            df_final['reference_date']).dt.strftime('%Y-%m-%d')
+
+        df_final = df_final.sort_values(['date', 'source'],
+                                        ascending=[True, True])
+
+        return df_final[
+            ['date', 'reference_date', 'source', 'type', 'value', 'surprise',
+             'days_since_reference']]
 
 
 if __name__ == "__main__":
     api_key = "79bd13604bbe0db51d65ce6dfdca87fb"
     client = FredClient(api_key)
 
-    observation_start = "2024-01-01"
-    as_of_date = "2026-05-04"
+    # -------
 
-    # data = client.get_series("GDP", observation_start=observation_start,
-    #                               as_of_date=as_of_date,
-    #                               return_full_history=True)
-    #
-    # ml_data = client.get_ml_series(
-    #     series_id="A191RL1Q225SBEA",
-    #     start_date="2024-01-01",
-    #     end_date="2026-01-01",
-    #     frequency="daily",
-    #     method="point-in-time"
-    # )
-    #
-    # ml_data1 = client.get_ml_series(
-    #     series_id="A191RL1Q225SBEA",
-    #     start_date="2024-01-01",
-    #     end_date="2026-01-01",
-    #     frequency="daily",
-    #     method="first"
-    # )
+    ml_data_daily = client.get_daily_series(
+        series_id="CPIAUCSL",
+        start_date="2025-01-01",
+    )
 
-    ml_data_diff = client.get_gdp_surprise_series(
-        start_date="2024-01-01",
+    # -------
+
+    ml_data_release = client.get_release_events(
+        series_id="CPIAUCSL",
+        start_date="2025-01-01",
+    )
+
+    # -------
+
+    ml_data = client.get_ml_series(
+        series_id="CPIAUCSL",
+        start_date="2025-01-01",
         end_date="2026-01-01",
+        frequency="daily",
+        method="point-in-time"
+    )
+
+    # ------
+
+    # Researchers define their models here
+    my_forecasts = {
+        "STLENI": "STLENI",
+        "GDPNOW": "GDPNOW",
+    }
+
+    # One call returns the entire stacked panel
+    df_panel = client.get_macro_surprise_panel(
+        start_date="2024-01-01",
+        end_date="2024-12-31",
+        actual_ticker="A191RL1Q225SBEA",
+        forecast_config=my_forecasts
     )
 
     # USEPUNEWSINDXM - Economic Uncertainty Index
