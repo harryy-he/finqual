@@ -93,6 +93,9 @@ class FredClient:
         end_date = datetime.now(timezone.utc).strftime('%Y-%m-%d')
         timeline = pd.date_range(start=start_date, end=end_date, freq='D')
 
+        # Labels
+        col_name = label if label else series_id
+
         daily_results = []
 
         # 3. Efficient Point-in-Time Scan
@@ -109,119 +112,127 @@ class FredClient:
 
                 daily_results.append({
                     'date': as_of,
+                    'reference_period': latest_obs['date'],
+                    'series_id': col_name,
                     'value': latest_obs['value'],
-                    'reference_period': latest_obs['date']
                 })
 
             else:
                 # Handle cases where no data was yet released for the start of the timeline
                 daily_results.append({
                     'date': as_of,
+                    'reference_period': None,
+                    'series_id': None,
                     'value': None,
-                    'reference_period': None
                 })
 
-        result_df = pd.DataFrame(daily_results)
+        df_result = pd.DataFrame(daily_results)
 
         # 4. Final Formatting
-        result_df['date'] = result_df['date'].dt.strftime('%Y-%m-%d')
-        result_df['reference_period'] = pd.to_datetime(result_df['reference_period']).dt.strftime('%Y-%m-%d')
+        df_result['date'] = df_result['date'].dt.strftime('%Y-%m-%d')
+        df_result['reference_period'] = pd.to_datetime(df_result['reference_period']).dt.strftime('%Y-%m-%d')
 
         # ---
 
-        col_name = label if label else series_id
-        result_df = result_df.rename(columns={'value': f'value_{col_name}'})
+        df_result = df_result[['date', 'reference_period', 'series_id', 'value']]
 
-        result_df = result_df[['date', f'value_{col_name}', 'reference_period']]
-
-        return result_df
+        return df_result
 
     def get_release_events(self, series_id: str, start_date: str,
                            first_release_only: bool = True,
-                           forecast_ids: list|None = None,
-                           label: str|None = None) -> pd.DataFrame:
-
-        # 1. Fetch FULL history - no start_date filter on the API call
+                           forecast_ids: list | None = None,
+                           labels: dict | None = None) -> pd.DataFrame:
+        """
+        Returns a LONG format dataframe. Each row represents an actual release
+        paired with a specific forecast source.
+        """
+        # 1. Fetch and Standardize Actuals
         df = self.get_series(series_id, return_full_history=True)
+        labels = labels or {}
 
-        # 2. Standardize
         df['date'] = pd.to_datetime(df['date']).dt.normalize()
-        df['realtime_start'] = pd.to_datetime(df['realtime_start']).dt.normalize()
+        df['realtime_start'] = pd.to_datetime(
+            df['realtime_start']).dt.normalize()
         df['value'] = pd.to_numeric(df['value'], errors='coerce')
 
-        # 3. Compute revision numbers across full history first
+        # 2. Compute revision numbers
         df = df.sort_values(['date', 'realtime_start'])
         df['revision_number'] = df.groupby('date').cumcount() + 1
 
-        # 4. NOW filter to only rows where the release itself happened after start_date
+        # 3. Filter by start_date and format
         start_dt = pd.to_datetime(start_date).normalize()
         df_event = df[df['realtime_start'] >= start_dt].copy()
-
-        # 5. Rename and format
-        df_event = df_event.rename(columns={
-            'realtime_start': 'release_date',
-            'date': 'reference_period',
-        })
-
-        df_event['release_date'] = df_event['release_date'].dt.strftime('%Y-%m-%d')
-        df_event['reference_period'] = df_event['reference_period'].dt.strftime('%Y-%m-%d')
 
         if first_release_only:
             df_event = df_event[df_event["revision_number"] == 1]
 
-        df_event = df_event[['release_date', 'reference_period', 'value', 'revision_number']]
-        df_event = df_event.sort_values(by=['release_date', 'reference_period'], ascending=[True, True])
+        df_event = df_event.rename(columns={
+            'realtime_start': 'release_date',
+            'date': 'reference_period',
+            'value': 'actual_value'  # Kept generic for the dictionary mapping
+        })
+
+        # Prepare IDs for the loop
+        actual_label = labels.get(series_id, series_id)
 
         if not forecast_ids:
+            # If no forecasts, return a simple table with the actual's label
+            df_event['series_id'] = actual_label
+            return df_event[['release_date', 'reference_period', 'series_id',
+                             'actual_value', 'revision_number']]
 
-            col_name = label if label else series_id
-            df_event = df_event.rename(columns={'value': f'value_{col_name}'})
-
-            return df_event
+        all_event_rows = []
 
         for f_id in forecast_ids:
-            # 1. Get the forecast's own release/revision history
-            # We need the full history to match specific reference periods
             f_history = self.get_series(f_id, return_full_history=True)
+            f_label = labels.get(f_id, f_id)
 
             # Standardize forecast history
-            f_history['date'] = pd.to_datetime(f_history['date']).dt.normalize()
-            f_history['realtime_start'] = pd.to_datetime(f_history['realtime_start']).dt.normalize()
-            f_history['value'] = pd.to_numeric(f_history['value'], errors='coerce')
+            f_history['date'] = pd.to_datetime(
+                f_history['date']).dt.normalize()
+            f_history['realtime_start'] = pd.to_datetime(
+                f_history['realtime_start']).dt.normalize()
+            f_history['value'] = pd.to_numeric(f_history['value'],
+                                               errors='coerce')
 
-            # 2. Prepare to store the "matched" forecast for each actual release
-            matched_forecasts = []
-
-            for idx, actual_row in df_event.iterrows():
-                ref_p = pd.to_datetime(actual_row['reference_period'])
-                rel_d = pd.to_datetime(actual_row['release_date'])
-
-                # Filter forecast history for:
-                # - The SAME reference period as the actual
-                # - Released ON or BEFORE the actual's release_date
+            for _, actual_row in df_event.iterrows():
+                # Find the forecast released STRICTLY BEFORE the actual release
                 f_match = f_history[
-                    (f_history['date'] == ref_p) &
-                    (f_history['realtime_start'] <= rel_d)
+                    (f_history['date'] == actual_row['reference_period']) &
+                    (f_history['realtime_start'] < actual_row['release_date'])
                     ]
 
-                if not f_match.empty:
-                    # Take the absolute latest forecast for that specific period
-                    latest_f = f_match.sort_values('realtime_start', ascending=False).iloc[0]['value']
-                else:
-                    latest_f = None
+                latest_f = \
+                f_match.sort_values('realtime_start', ascending=False).iloc[0][
+                    'value'] if not f_match.empty else None
 
-                matched_forecasts.append(latest_f)
+                # Build the Long Row
+                all_event_rows.append({
+                    'release_date': actual_row['release_date'],
+                    'reference_period': actual_row['reference_period'],
+                    'series_id': actual_label,
+                    'actual_value': actual_row['actual_value'],
+                    'revision_number': actual_row['revision_number'],
+                    'forecast_source': f_label,
+                    'forecast_value': latest_f,
+                    'surprise': actual_row[
+                                    'actual_value'] - latest_f if latest_f is not None else None
+                })
 
-            # 3. Add the columns to the dataframe
-            df_event[f'forecast_{f_id}'] = matched_forecasts
-            df_event[f'surprise_{f_id}'] = df_event['value'] - df_event[f'forecast_{f_id}']
+        # 4. Final DataFrame Construction
+        result_df = pd.DataFrame(all_event_rows)
 
-        df_event = df_event.sort_values(by=['release_date', 'reference_period'], ascending=[True, True])
+        # Sort by date then source for best scannability
+        result_df = result_df.sort_values(
+            by=['release_date', 'forecast_source'], ascending=[True, True])
 
-        col_name = label if label else series_id
-        df_event = df_event.rename(columns={'value': f'value_{col_name}'})
+        # Format dates to strings for final output
+        result_df['release_date'] = result_df['release_date'].dt.strftime(
+            '%Y-%m-%d')
+        result_df['reference_period'] = result_df[
+            'reference_period'].dt.strftime('%Y-%m-%d')
 
-        return df_event
+        return result_df
 
     def get_bulk_daily_series(self, series_ids: str | list[str],
                               start_date: str,
@@ -230,56 +241,27 @@ class FredClient:
         if isinstance(series_ids, str):
             series_ids = [series_ids]
 
-        start_dt = pd.to_datetime(start_date).normalize()
-        end_date = datetime.now(timezone.utc).strftime('%Y-%m-%d')
-
-        # 1. Create the master timeline grid
-        master_df = pd.DataFrame({'date': pd.date_range(start=start_dt, end=end_date, freq='D')})
-        master_df['date'] = master_df['date'].dt.normalize()
+        labels = labels or {}
+        all_dfs = []
 
         for s_id in series_ids:
-            # 2. Fetch full history
-            df = self.get_series(s_id, observation_start="1776-07-04", return_full_history=True)
+            label = labels.get(s_id, s_id)
+            df_single = self.get_daily_series(s_id, start_date, label=label)
 
-            # Standardize and sort for merge_asof (required)
-            df['date'] = pd.to_datetime(df['date']).dt.normalize()
-            df['realtime_start'] = pd.to_datetime(df['realtime_start']).dt.normalize()
-            df['value'] = pd.to_numeric(df['value'], errors='coerce')
+            # In long format, we normalize the value column name
+            # so they can all be stacked on top of each other
+            val_col = f'value_{label}'
+            if val_col in df_single.columns:
+                df_single = df_single.rename(columns={val_col: 'value'})
 
-            # We only care about the latest 'realtime_start' for each observation 'date'
-            # to ensure we don't have duplicates before the asof merge
-            df = df.sort_values(['realtime_start', 'date'], ascending=[True, False])
+            all_dfs.append(df_single)
 
-            # 3. Vectorized Point-in-Time Join
-            # This matches each day in master_df to the most recent 'realtime_start' in df
-            temp_daily = pd.merge_asof(
-                master_df,
-                df[['realtime_start', 'value', 'date']],
-                left_on='date',
-                right_on='realtime_start',
-                direction='backward'
-            )
+        # Stack them all vertically
+        df_long = pd.concat(all_dfs, axis=0)
+        df_long = df_long.sort_values(['series_id', 'date'])
 
-            # 4. Cleanup and Labeling
-            label = labels.get(s_id, s_id) if labels else s_id
-            temp_daily = temp_daily.rename(columns={
-                'value': f'value_{label}',
-                'date_y': f'ref_{label}'
-            })
+        return df_long
 
-            # Keep only necessary columns for the next merge
-            master_df = master_df.merge(
-                temp_daily[['date_x', f'value_{label}', f'ref_{label}']],
-                left_on='date',
-                right_on='date_x'
-            ).drop(columns=['date_x'])
-
-        # 5. Final Formatting
-        master_df['date'] = master_df['date'].dt.strftime('%Y-%m-%d')
-        for col in [c for c in master_df.columns if c.startswith('ref_')]:
-            master_df[col] = pd.to_datetime(master_df[col]).dt.strftime('%Y-%m-%d')
-
-        return master_df
 
 if __name__ == "__main__":
     api_key = "79bd13604bbe0db51d65ce6dfdca87fb"
@@ -298,21 +280,24 @@ if __name__ == "__main__":
         series_id="A191RL1Q225SBEA",
         forecast_ids=['STLENI', 'GDPNOW'],
         start_date="2025-01-01",
-        label="GDP"
+        first_release_only=True,
+        labels={"A191RL1Q225SBEA": "GDP",
+                "STLENI": "STLENI",
+                "GDPNOW": "GDPNOW"}
     )
 
     # -------
 
-    df_enriched = df_GDP.merge(
-        df_gdp_surprise[['release_date', 'surprise_STLENI']],
-        left_on='date',
-        right_on='release_date',
-        how='left'
-    )
+    # df_enriched = df_GDP.merge(
+    #     df_gdp_surprise[['release_date', 'surprise_STLENI']],
+    #     left_on='date',
+    #     right_on='release_date',
+    #     how='left'
+    # )
 
     # -------
 
-    ml_bulk_data_release = client.get_bulk_daily_series(
+    df_long = client.get_bulk_daily_series(
         series_ids=["A191RL1Q225SBEA", "STLENI"],
         start_date="2025-01-01",
         labels={"A191RL1Q225SBEA": "GDP"}
